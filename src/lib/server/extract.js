@@ -150,6 +150,23 @@ Rules:
 - Exclusive or shared backyard access both count as has_backyard=true.
 - If an email is not a listing alert at all, return an empty list.`;
 
+/**
+ * The tool's `listings` should be an array, but with long emails the model sometimes sends it as a
+ * JSON string (or a single object). Accept all three shapes.
+ */
+export function coerceListings(value) {
+	if (Array.isArray(value)) return value;
+	if (typeof value === 'string') {
+		try {
+			return coerceListings(JSON.parse(value));
+		} catch {
+			throw new Error('Claude returned listings as text that is not valid JSON');
+		}
+	}
+	if (value && typeof value === 'object') return Array.isArray(value.listings) ? value.listings : [value];
+	return [];
+}
+
 export async function extractWithClaude(env, { subject, from, text }) {
 	const res = await fetch('https://api.anthropic.com/v1/messages', {
 		method: 'POST',
@@ -160,7 +177,8 @@ export async function extractWithClaude(env, { subject, from, text }) {
 		},
 		body: JSON.stringify({
 			model: env.ANTHROPIC_MODEL || 'claude-haiku-5-5',
-			max_tokens: 4096,
+			// ~150 tokens per listing: room for a full page of pasted search results
+			max_tokens: 16000,
 			system: SYSTEM,
 			tools: [EXTRACT_TOOL],
 			tool_choice: { type: 'tool', name: 'record_listings' },
@@ -174,8 +192,11 @@ export async function extractWithClaude(env, { subject, from, text }) {
 	});
 	if (!res.ok) throw new Error(`Claude extraction failed: ${res.status} ${await res.text()}`);
 	const json = await res.json();
+	if (json.stop_reason === 'max_tokens') {
+		throw new Error('Too many listings in one email for a single extraction; split it into smaller emails');
+	}
 	const call = json.content?.find((c) => c.type === 'tool_use');
-	return call?.input?.listings || [];
+	return coerceListings(call?.input?.listings);
 }
 
 function toNumber(v) {

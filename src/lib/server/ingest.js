@@ -117,7 +117,8 @@ export async function runIngest(env, { dashboardUrl } = {}) {
 		summary.emailsFound = ids.length;
 
 		const { data: done } = ids.length
-			? await supabase.from('alert_emails').select('gmail_id').in('gmail_id', ids)
+			? // Emails that failed (error set) are retried on the next run
+				await supabase.from('alert_emails').select('gmail_id').in('gmail_id', ids).is('error', null)
 			: { data: [] };
 		const doneSet = new Set((done || []).map((d) => d.gmail_id));
 		const todo = ids.filter((id) => !doneSet.has(id)).slice(0, max);
