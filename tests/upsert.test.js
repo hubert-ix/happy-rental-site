@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { upsertListing } from '../src/lib/server/ingest.js';
+import { upsertListing, applyManualEdit } from '../src/lib/server/ingest.js';
 import { normalizeListing } from '../src/lib/server/extract.js';
 
 // Tiny in-memory stand-in for the parts of supabase-js that ingest uses.
@@ -16,8 +16,9 @@ function fakeSupabase() {
 			eq: (k, v) => (filters.push([k, v]), op === 'update' ? run() : api),
 			limit: () => api,
 			maybeSingle: async () => ({ data: rows()[0] ?? null }),
-			single: async () => ({ data: payload, error: null }),
+			single: async () => ({ data: op === 'insert' ? payload : rows()[0] ?? null, error: null }),
 			insert: (row) => {
+				op = 'insert';
 				payload = { ...row, id: nextId++ };
 				tables[table].push(payload);
 				return api;
@@ -87,5 +88,60 @@ describe('upsertListing', () => {
 		expect(row.score).toBe(85);
 		expect(row.notified_at).toBe(null); // price drop re-arms the notification
 		expect(fetch).toHaveBeenCalledTimes(1); // geocoded once, then reused
+	});
+});
+
+describe('manual edits', () => {
+	it('saves a corrected title and price, re-scores, and keeps them when new emails arrive', async () => {
+		const sb = fakeSupabase();
+		const env = { NOMINATIM_EMAIL: 'test@example.com' };
+
+		// Kijiji paste with a misread price and no proper address
+		const misread = normalizeListing(
+			{ url: 'https://www.kijiji.ca/v-apartments/x/999', address: 'Listing', price: 1900, bedrooms_raw: '3' },
+			'kijiji'
+		);
+		const { id } = await upsertListing(env, sb, misread);
+		expect(sb.tables.listings[0].passes_filters).toBe(false); // $1,900 is under the minimum
+
+		await applyManualEdit(env, sb, id, { address: '79 McKee Avenue', price: 3300 });
+		let row = sb.tables.listings[0];
+		expect(row.address).toBe('79 McKee Avenue');
+		expect(row.price).toBe(3300);
+		expect(row.previous_price).toBe(null);
+		expect(row.locked_fields.sort()).toEqual(['address', 'price']);
+		expect(row.in_area).toBe(true); // re-geocoded from the new address
+		expect(row.passes_filters).toBe(true); // re-scored with the corrected price
+
+		// The same ad arrives again with the wrong price: the correction must survive
+		await upsertListing(env, sb, misread);
+		row = sb.tables.listings[0];
+		expect(sb.tables.listings).toHaveLength(1);
+		expect(row.address).toBe('79 McKee Avenue');
+		expect(row.price).toBe(3300);
+		expect(row.previous_price).toBe(null);
+		expect(row.passes_filters).toBe(true);
+	});
+
+	it('only locks the fields that actually changed', async () => {
+		const sb = fakeSupabase();
+		const l = normalizeListing({ url: 'https://x.ca/v-a/1', address: '1 A St', price: 3000, bedrooms_raw: '3' }, 'kijiji');
+		const { id } = await upsertListing({}, sb, l);
+		await applyManualEdit({}, sb, id, { address: '1 A St', price: 3100 });
+		expect(sb.tables.listings[0].locked_fields).toEqual(['price']);
+	});
+});
+
+describe('deleted listings', () => {
+	it('stay deleted when the same listing arrives in a later email', async () => {
+		const sb = fakeSupabase();
+		const l = normalizeListing({ url: 'https://x.ca/v-a/7', address: '7 Basement Rd', price: 2600, bedrooms_raw: '3' }, 'kijiji');
+		const { id } = await upsertListing({}, sb, l);
+		sb.tables.listings[0].status = 'deleted'; // what the dashboard's delete action does
+
+		const again = await upsertListing({}, sb, { ...l, price: 2550 });
+		expect(again).toEqual({ id, isNew: false });
+		expect(sb.tables.listings).toHaveLength(1);
+		expect(sb.tables.listings[0].status).toBe('deleted');
 	});
 });

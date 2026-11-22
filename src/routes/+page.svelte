@@ -1,7 +1,7 @@
 <script>
 	import { onMount, onDestroy } from 'svelte';
 	import { enhance } from '$app/forms';
-	import { Bed, Bath, Ruler, ExternalLink, MapPin, Check, X, Minus, CircleQuestionMark } from '@lucide/svelte';
+	import { Bed, Bath, Ruler, ExternalLink, MapPin, Check, X, Minus, CircleQuestionMark, Pencil, Trash2 } from '@lucide/svelte';
 	import { formatSqft } from '$lib/format.js';
 	import { noteToTag, scoreTier } from '$lib/tags.js';
 	import 'leaflet/dist/leaflet.css';
@@ -36,8 +36,28 @@
 		if (e.key === 'Escape') {
 			selectedId = null;
 			editingScoreId = null;
+			editingId = null;
+			confirmDeleteId = null;
 		}
 	}
+
+	// Listing waiting for its delete to be confirmed
+	let confirmDeleteId = $state(null);
+
+	// Listing whose title and price are being edited
+	let editingId = $state(null);
+	let editError = $state(null);
+	const isLocked = (l, field) => (l.locked_fields || []).includes(field);
+
+	const afterEdit = () => async ({ result, update }) => {
+		if (result.type === 'failure') {
+			editError = result.data?.message ?? 'Could not save';
+			return;
+		}
+		await update();
+		editError = null;
+		editingId = null;
+	};
 
 	// Score you set by hand wins over the computed one
 	let editingScoreId = $state(null);
@@ -190,34 +210,56 @@
 			<article id="l{l.id}" class="card" class:fail={!l.passes_filters} class:selected={selectedId === l.id} class:hovered={hoveredId === l.id}>
 				<div class="card-top">
 					<div class="card-main">
-						<h2>
-							{#if l.url}
-								<a href={l.url} target="_blank" rel="noopener">{l.address ?? 'Listing'}</a>
-							{:else}
-								{l.address ?? 'Listing'}
-							{/if}
-							{#if l.unit}<span class="unit">{l.unit}</span>{/if}
-						</h2>
-
-						<div class="facts">
-							<span class="price">
-								{money(l.price)}<small>/mo</small>
-								{#if l.previous_price && l.previous_price !== l.price}
-									<s>{money(l.previous_price)}</s>
-								{/if}
-							</span>
-							<span class="fact"><Bed size={16} />{l.bedrooms_raw ?? l.bedrooms ?? '?'} bed</span>
-							<span class="fact"><Bath size={16} />{l.bathrooms ?? '?'} bath</span>
-							{#if sqft}<span class="fact"><Ruler size={16} />{sqft}</span>{/if}
-							<span class="fact subtle">
+						{#if editingId === l.id}
+							<form method="POST" action="?/edit" use:enhance={afterEdit} class="listing-edit">
+								<input type="hidden" name="id" value={l.id} />
+								<label>
+									<span>Title</span>
+									<input name="address" value={l.address ?? ''} required maxlength="200" use:focusAndSelect />
+								</label>
+								<label class="price-field">
+									<span>Price / month</span>
+									<input name="price" type="number" min="0" max="100000" step="1" value={l.price ?? ''} placeholder="unknown" />
+								</label>
+								<div class="listing-edit-actions">
+									<button type="submit">Save</button>
+									<button type="button" class="cancel" onclick={() => ((editingId = null), (editError = null))}>Cancel</button>
+									{#if editError}<span class="edit-error" role="alert">{editError}</span>{/if}
+								</div>
+							</form>
+						{:else}
+							<h2>
 								{#if l.url}
-									<a href={l.url} target="_blank" rel="noopener"><ExternalLink size={14} />{l.sources.join(', ')}</a>
+									<a href={l.url} target="_blank" rel="noopener">{l.address ?? 'Listing'}</a>
 								{:else}
-									{l.sources.join(', ')}
+									{l.address ?? 'Listing'}
 								{/if}
-								· {ago(l.first_seen)}
-							</span>
-						</div>
+								{#if l.unit}<span class="unit">{l.unit}</span>{/if}
+								{#if isLocked(l, 'address') || isLocked(l, 'price')}
+									<span class="edited" title="You edited this listing; new emails won't overwrite your changes">edited</span>
+								{/if}
+							</h2>
+
+							<div class="facts">
+								<span class="price">
+									{money(l.price)}<small>/mo</small>
+									{#if l.previous_price && l.previous_price !== l.price}
+										<s>{money(l.previous_price)}</s>
+									{/if}
+								</span>
+								<span class="fact"><Bed size={16} />{l.bedrooms_raw ?? l.bedrooms ?? '?'} bed</span>
+								<span class="fact"><Bath size={16} />{l.bathrooms ?? '?'} bath</span>
+								{#if sqft}<span class="fact"><Ruler size={16} />{sqft}</span>{/if}
+								<span class="fact subtle">
+									{#if l.url}
+										<a href={l.url} target="_blank" rel="noopener"><ExternalLink size={14} />{l.sources.join(', ')}</a>
+									{:else}
+										{l.sources.join(', ')}
+									{/if}
+									· {ago(l.first_seen)}
+								</span>
+							</div>
+						{/if}
 					</div>
 
 					{#if editingScoreId === l.id}
@@ -274,6 +316,23 @@
 							<button name="status" value={s} class:current={l.status === s} aria-pressed={l.status === s}>{s}</button>
 						{/each}
 					</form>
+					<div class="row-buttons">
+						<button type="button" class="edit-btn" onclick={() => ((editingId = l.id), (editError = null))}>
+							<Pencil size={14} />Edit
+						</button>
+						{#if confirmDeleteId === l.id}
+							<form method="POST" action="?/delete" use:enhance class="confirm-delete">
+								<input type="hidden" name="id" value={l.id} />
+								<span>Delete this listing?</span>
+								<button type="submit" class="danger">Delete</button>
+								<button type="button" class="cancel" onclick={() => (confirmDeleteId = null)}>Cancel</button>
+							</form>
+						{:else}
+							<button type="button" class="edit-btn delete-btn" onclick={() => (confirmDeleteId = l.id)}>
+								<Trash2 size={14} />Delete
+							</button>
+						{/if}
+					</div>
 					<form method="POST" action="?/note" use:enhance class="note">
 						<input type="hidden" name="id" value={l.id} />
 						<input name="notes" aria-label="Notes" placeholder="Notes (asked about garage, viewing Tue…)" value={l.notes ?? ''} />

@@ -562,3 +562,146 @@ body {
     min-width: 100%;
   }
 }
+
+/* ---------- editing a listing ---------- */
+
+.dashboard .edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.dashboard .edit-btn:hover {
+  background: var(--lavender);
+}
+
+.dashboard .edited {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px dashed var(--line-dashed);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.dashboard .listing-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 12px;
+}
+
+.dashboard .listing-edit label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 260px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.dashboard .listing-edit label.price-field {
+  flex: 0 1 150px;
+}
+
+.dashboard .listing-edit input {
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--lavender-soft);
+  color: var(--ink);
+}
+
+.dashboard .listing-edit input:focus {
+  outline: none;
+  border-color: var(--ink);
+  background: #fff;
+}
+
+.dashboard .listing-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-basis: 100%;
+}
+
+.dashboard .listing-edit-actions button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--dark);
+  color: #fff;
+  cursor: pointer;
+}
+
+.dashboard .listing-edit-actions .cancel {
+  background: var(--lavender);
+  color: var(--ink);
+}
+
+.dashboard .edit-error {
+  font-size: 13px;
+  color: var(--bad-ink);
+}
+
+/* ---------- deleting a listing ---------- */
+
+.dashboard .row-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dashboard .delete-btn:hover {
+  background: var(--bad-bg);
+  color: var(--bad-ink);
+  border-color: var(--bad-bg);
+}
+
+.dashboard .confirm-delete {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--bad-ink);
+}
+
+.dashboard .confirm-delete button {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.dashboard .confirm-delete .danger {
+  background: var(--bad-ink);
+  color: #fff;
+}
+
+.dashboard .confirm-delete .cancel {
+  background: var(--lavender);
+  color: var(--ink);
+}

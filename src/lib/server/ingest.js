@@ -20,16 +20,19 @@ export async function upsertListing(env, supabase, l) {
 		({ data: existing } = await supabase.from('listings').select('*').eq('addr_key', addrKey).limit(1).maybeSingle());
 	}
 	const prev = existing || {};
+	// Fields you corrected on the dashboard are never overwritten by a new email
+	const locked = new Set(prev.locked_fields || []);
+	const keep = (field, next) => (locked.has(field) ? prev[field] : next);
 
 	const merged = {
 		mls: pick(l.mls, prev.mls),
 		url: pick(prev.url, l.url), // keep the first link we saw as the primary one
 		urls: [...new Set([...(prev.urls || []), l.url].filter(Boolean))],
 		sources: [...new Set([...(prev.sources || []), l.source].filter(Boolean))],
-		address: pick(l.address, prev.address),
-		addr_key: pick(addrKey, prev.addr_key),
+		address: keep('address', pick(l.address, prev.address)),
+		addr_key: locked.has('address') ? prev.addr_key : pick(addrKey, prev.addr_key),
 		unit: pick(l.unit, prev.unit),
-		price: pick(l.price, prev.price),
+		price: keep('price', pick(l.price, prev.price)),
 		previous_price: prev.previous_price ?? null,
 		bedrooms: pick(l.bedrooms, prev.bedrooms),
 		bedrooms_raw: pick(l.bedrooms_raw, prev.bedrooms_raw),
@@ -48,8 +51,9 @@ export async function upsertListing(env, supabase, l) {
 		last_seen: new Date().toISOString()
 	};
 
-	const priceDropped = existing && l.price && prev.price && l.price < prev.price;
-	if (existing && l.price && prev.price && l.price !== prev.price) merged.previous_price = prev.price;
+	const priceLocked = locked.has('price');
+	const priceDropped = existing && !priceLocked && l.price && prev.price && l.price < prev.price;
+	if (existing && !priceLocked && l.price && prev.price && l.price !== prev.price) merged.previous_price = prev.price;
 
 	if (merged.lat === null && merged.address) {
 		const hit = await geocode(env, supabase, merged.address);
@@ -87,7 +91,7 @@ export async function backfillLocations(env, supabase, limit = 20) {
 		.select('*')
 		.is('lat', null)
 		.not('address', 'is', null)
-		.not('status', 'in', '(rejected,gone)')
+		.not('status', 'in', '(rejected,gone,deleted)')
 		.order('first_seen', { ascending: false })
 		.limit(limit);
 
@@ -111,7 +115,7 @@ export async function backfillLocations(env, supabase, limit = 20) {
  * config.js also reach listings that arrived earlier. Only rows whose result changed are written.
  */
 export async function rescoreAll(supabase) {
-	const { data: rows } = await supabase.from('listings').select('*').neq('status', 'gone').limit(1000);
+	const { data: rows } = await supabase.from('listings').select('*').not('status', 'in', '(gone,deleted)').limit(1000);
 	let changed = 0;
 	for (const row of rows || []) {
 		const { passes, score, notes } = scoreListing(row);
@@ -185,7 +189,7 @@ export async function runIngest(env, { dashboardUrl } = {}) {
 		.eq('passes_filters', true)
 		.gte('score', CRITERIA.notifyMinScore)
 		.is('notified_at', null)
-		.not('status', 'in', '(rejected,gone)')
+		.not('status', 'in', '(rejected,gone,deleted)')
 		.order('score', { ascending: false });
 
 	if (matches?.length) {
@@ -197,4 +201,39 @@ export async function runIngest(env, { dashboardUrl } = {}) {
 		summary.notified = matches.length;
 	}
 	return summary;
+}
+
+/**
+ * Apply a correction made on the dashboard. Changed fields are locked so later emails don't
+ * overwrite them; a new address is re-geocoded, and the listing is re-scored straight away.
+ */
+export async function applyManualEdit(env, supabase, id, { address, price }) {
+	const { data: row, error: readError } = await supabase.from('listings').select('*').eq('id', id).single();
+	if (readError || !row) throw new Error(readError?.message || `Listing ${id} not found`);
+
+	const changes = {};
+	const locked = new Set(row.locked_fields || []);
+
+	if (address !== undefined && address !== row.address) {
+		changes.address = address;
+		changes.addr_key = address ? normalizeAddress(address, row.unit) : row.addr_key;
+		const hit = address ? await geocode(env, supabase, address) : null;
+		changes.lat = hit?.lat ?? null;
+		changes.lng = hit?.lng ?? null;
+		changes.in_area = hit ? pointInPolygon(hit.lng, hit.lat) : null;
+		locked.add('address');
+	}
+	if (price !== undefined && price !== row.price) {
+		changes.price = price;
+		changes.previous_price = null; // a correction isn't a price change
+		locked.add('price');
+	}
+	if (!Object.keys(changes).length) return row;
+
+	const { passes, score, notes } = scoreListing({ ...row, ...changes });
+	Object.assign(changes, { passes_filters: passes, score, score_notes: notes, locked_fields: [...locked] });
+
+	const { error } = await supabase.from('listings').update(changes).eq('id', id);
+	if (error) throw new Error(error.message);
+	return { ...row, ...changes };
 }
