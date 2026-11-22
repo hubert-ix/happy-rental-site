@@ -3,6 +3,7 @@
 	import { enhance } from '$app/forms';
 	import { formatSqft } from '$lib/format.js';
 	import 'leaflet/dist/leaflet.css';
+	import './styles.css';
 
 	let { data } = $props();
 
@@ -57,7 +58,9 @@
 	});
 </script>
 
+
 <main>
+
 	<header>
 		<h1>Happy Rental</h1>
 		<p class="meta">
@@ -120,161 +123,5 @@
 			</article>
 		{/each}
 	</section>
+	
 </main>
-
-<style>
-	:global(body) {
-		margin: 0;
-		font-family: system-ui, -apple-system, Segoe UI, sans-serif;
-		background: #f6f7f9;
-		color: #1a1a1a;
-	}
-	main {
-		max-width: 960px;
-		margin: 0 auto;
-		padding: 16px;
-	}
-	h1 {
-		margin: 0;
-	}
-	.meta {
-		color: #555;
-		margin: 4px 0 12px;
-	}
-	nav {
-		display: flex;
-		gap: 6px;
-		flex-wrap: wrap;
-	}
-	nav a {
-		padding: 4px 10px;
-		border-radius: 999px;
-		background: #e5e7eb;
-		color: #333;
-		text-decoration: none;
-		font-size: 14px;
-	}
-	nav a.active {
-		background: #2563eb;
-		color: white;
-	}
-	.map {
-		height: 360px;
-		border-radius: 10px;
-		margin: 16px 0;
-		z-index: 0;
-	}
-	.empty {
-		color: #666;
-	}
-	article {
-		background: white;
-		border-radius: 10px;
-		padding: 14px 16px;
-		margin-bottom: 12px;
-		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-	}
-	article.fail {
-		opacity: 0.65;
-	}
-	.top {
-		display: flex;
-		justify-content: space-between;
-		gap: 12px;
-	}
-	h2 {
-		font-size: 17px;
-		margin: 0 0 4px;
-	}
-	h2 a {
-		color: inherit;
-	}
-	.unit {
-		font-size: 13px;
-		background: #eef2ff;
-		color: #3730a3;
-		padding: 1px 6px;
-		border-radius: 4px;
-		margin-left: 6px;
-		font-weight: 500;
-	}
-	.facts {
-		font-size: 14px;
-		color: #444;
-	}
-	.score {
-		font-size: 22px;
-		font-weight: 700;
-		color: #0a7d3b;
-		min-width: 40px;
-		text-align: right;
-	}
-	.notes {
-		list-style: none;
-		padding: 0;
-		margin: 10px 0 0;
-		display: flex;
-		flex-wrap: wrap;
-		gap: 6px;
-	}
-	.notes li {
-		font-size: 13px;
-		padding: 2px 8px;
-		border-radius: 4px;
-	}
-	.good {
-		background: #dcfce7;
-		color: #166534;
-	}
-	.bad {
-		background: #fee2e2;
-		color: #991b1b;
-	}
-	.meh {
-		background: #fef9c3;
-		color: #854d0e;
-	}
-	.unknown {
-		background: #f3f4f6;
-		color: #555;
-	}
-	.summary {
-		font-size: 14px;
-		color: #555;
-		margin: 8px 0 0;
-	}
-	.actions {
-		margin-top: 10px;
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-		align-items: center;
-		justify-content: space-between;
-	}
-	.actions button {
-		font-size: 12px;
-		padding: 3px 8px;
-		border: 1px solid #d1d5db;
-		background: white;
-		border-radius: 4px;
-		cursor: pointer;
-	}
-	.actions button.current {
-		background: #1f2937;
-		color: white;
-		border-color: #1f2937;
-	}
-	.noteform {
-		display: flex;
-		gap: 4px;
-		flex: 1;
-		min-width: 240px;
-	}
-	.noteform input {
-		flex: 1;
-		font-size: 13px;
-		padding: 3px 6px;
-		border: 1px solid #d1d5db;
-		border-radius: 4px;
-	}
-</style>
