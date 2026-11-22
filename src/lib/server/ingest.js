@@ -1,0 +1,135 @@
+import { db } from './supabase.js';
+import { openMailbox } from './gmail.js';
+import { extractListings, dedupeKey, normalizeAddress } from './extract.js';
+import { geocode, pointInPolygon } from './geo.js';
+import { scoreListing } from './score.js';
+import { notifyMatches } from './notify.js';
+import { CRITERIA } from './config.js';
+
+const pick = (next, prev) => (next === null || next === undefined ? prev ?? null : next);
+// For yes/no features: a "true" from any site wins; otherwise take whichever is known.
+const pickBool = (next, prev) => (next === true || prev === true ? true : pick(next, prev));
+
+/** Insert a new listing or merge it into the one we already have (matched by MLS, then address). */
+export async function upsertListing(env, supabase, l) {
+	const key = dedupeKey(l);
+	const addrKey = l.address ? normalizeAddress(l.address, l.unit) : null;
+
+	let { data: existing } = await supabase.from('listings').select('*').eq('dedupe_key', key).maybeSingle();
+	if (!existing && addrKey) {
+		({ data: existing } = await supabase.from('listings').select('*').eq('addr_key', addrKey).limit(1).maybeSingle());
+	}
+	const prev = existing || {};
+
+	const merged = {
+		mls: pick(l.mls, prev.mls),
+		url: pick(prev.url, l.url), // keep the first link we saw as the primary one
+		urls: [...new Set([...(prev.urls || []), l.url].filter(Boolean))],
+		sources: [...new Set([...(prev.sources || []), l.source].filter(Boolean))],
+		address: pick(l.address, prev.address),
+		addr_key: pick(addrKey, prev.addr_key),
+		unit: pick(l.unit, prev.unit),
+		price: pick(l.price, prev.price),
+		previous_price: prev.previous_price ?? null,
+		bedrooms: pick(l.bedrooms, prev.bedrooms),
+		bedrooms_raw: pick(l.bedrooms_raw, prev.bedrooms_raw),
+		bathrooms: pick(l.bathrooms, prev.bathrooms),
+		parking_spaces: pick(l.parking_spaces, prev.parking_spaces),
+		has_garage: pickBool(l.has_garage, prev.has_garage),
+		has_backyard: pickBool(l.has_backyard, prev.has_backyard),
+		has_storage: pickBool(l.has_storage, prev.has_storage),
+		property_type: pick(l.property_type, prev.property_type),
+		summary: pick(l.summary, prev.summary),
+		lat: prev.lat ?? null,
+		lng: prev.lng ?? null,
+		last_seen: new Date().toISOString()
+	};
+
+	const priceDropped = existing && l.price && prev.price && l.price < prev.price;
+	if (existing && l.price && prev.price && l.price !== prev.price) merged.previous_price = prev.price;
+
+	if (merged.lat === null && merged.address) {
+		const hit = await geocode(env, supabase, merged.address);
+		if (hit) Object.assign(merged, hit);
+	}
+	merged.in_area = merged.lat === null ? null : pointInPolygon(merged.lng, merged.lat);
+
+	const { passes, score, notes } = scoreListing(merged);
+	merged.passes_filters = passes;
+	merged.score = score;
+	merged.score_notes = notes;
+	if (priceDropped) merged.notified_at = null; // a price drop is worth another ping
+
+	if (existing) {
+		const { error } = await supabase.from('listings').update(merged).eq('id', existing.id);
+		if (error) throw error;
+		return { id: existing.id, isNew: false };
+	}
+	const { data, error } = await supabase
+		.from('listings')
+		.insert({ ...merged, dedupe_key: key })
+		.select('id')
+		.single();
+	if (error) throw error;
+	return { id: data.id, isNew: true };
+}
+
+export async function runIngest(env, { dashboardUrl } = {}) {
+	const supabase = db(env);
+	const max = Number(env.MAX_EMAILS_PER_RUN || 15);
+	const summary = { emailsFound: 0, emailsProcessed: 0, listingsSeen: 0, newListings: 0, notified: 0, errors: [] };
+
+	const mailbox = await openMailbox(env);
+	try {
+		const ids = await mailbox.listMessageIds(env.GMAIL_QUERY || 'label:rental-alerts newer_than:7d');
+		summary.emailsFound = ids.length;
+
+		const { data: done } = ids.length
+			? await supabase.from('alert_emails').select('gmail_id').in('gmail_id', ids)
+			: { data: [] };
+		const doneSet = new Set((done || []).map((d) => d.gmail_id));
+		const todo = ids.filter((id) => !doneSet.has(id)).slice(0, max);
+
+		for (const id of todo) {
+			const record = { gmail_id: id, listing_count: 0, error: null };
+			try {
+				const email = await mailbox.getMessage(id);
+				Object.assign(record, { received_at: email.receivedAt, sender: email.from, subject: email.subject });
+				const { source, listings } = await extractListings(env, email);
+				record.source = source;
+				for (const l of listings) {
+					const { isNew } = await upsertListing(env, supabase, l);
+					summary.listingsSeen++;
+					if (isNew) summary.newListings++;
+				}
+				record.listing_count = listings.length;
+			} catch (err) {
+				record.error = String(err?.message || err).slice(0, 1000);
+				summary.errors.push({ id, error: record.error });
+			}
+			await supabase.from('alert_emails').upsert(record);
+			summary.emailsProcessed++;
+		}
+	} finally {
+		await mailbox.close();
+	}
+
+	const { data: matches } = await supabase
+		.from('listings')
+		.select('*')
+		.eq('passes_filters', true)
+		.gte('score', CRITERIA.notifyMinScore)
+		.is('notified_at', null)
+		.not('status', 'in', '(rejected,gone)')
+		.order('score', { ascending: false });
+
+	if (matches?.length) {
+		await notifyMatches(env, matches, dashboardUrl);
+		await supabase
+			.from('listings')
+			.update({ notified_at: new Date().toISOString() })
+			.in('id', matches.map((m) => m.id));
+		summary.notified = matches.length;
+	}
+	return summary;
+}
