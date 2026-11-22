@@ -125,15 +125,20 @@ body {
   z-index: 0;
 }
 
-.dashboard .leaflet-popup-content {
+.dashboard .leaflet-tooltip.listing-tip {
   font-family: var(--font-body);
   font-size: 13px;
   line-height: 1.45;
+  color: var(--ink);
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(var(--shadow), 0.15);
 }
 
-.dashboard .leaflet-popup-content a {
-  color: var(--ink);
-  font-weight: 600;
+.dashboard .leaflet-tooltip.listing-tip .tip-hint {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 /* ---------- empty state ---------- */
@@ -176,8 +181,10 @@ body {
   box-shadow: 0 6px 22px rgba(var(--shadow), 0.1);
 }
 
-.dashboard .card.selected {
-  border: 2px solid #d2bffd;
+.dashboard .card.selected,
+.dashboard .card.hovered {
+  outline: 2px solid #d2bffd;
+  border-color: transparent;
 }
 
 .dashboard .card.fail {
@@ -348,8 +355,6 @@ body {
 
 .dashboard .card-actions {
   margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
   display: flex;
   flex-wrap: wrap;
   gap: 12px;

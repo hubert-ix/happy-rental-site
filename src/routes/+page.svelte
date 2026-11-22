@@ -16,18 +16,19 @@
 	let L;
 	let resizeObserver;
 
-	// Card highlighted from a map popup's "details" link; cleared by clicking anywhere else or Esc
+	// selectedId: card picked by clicking its map dot (stays until you click elsewhere or press Esc)
+	// hoveredId: card whose map dot the mouse is over right now
 	let selectedId = $state(null);
+	let hoveredId = $state(null);
+
+	function selectListing(id) {
+		selectedId = id;
+		document.getElementById(`l${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+	}
 
 	function onDocumentClick(e) {
-		const link = e.target.closest?.('a[data-listing]');
-		if (link) {
-			e.preventDefault();
-			selectedId = Number(link.dataset.listing);
-			map?.closePopup();
-			document.getElementById(`l${selectedId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-			return;
-		}
+		// Clicks on map dots are handled by the marker itself (see drawMarkers)
+		if (e.target.closest?.('.leaflet-interactive')) return;
 		if (selectedId !== null && !e.target.closest?.(`#l${selectedId}`)) selectedId = null;
 	}
 
@@ -61,11 +62,16 @@
 				fillColor: TIER_COLOURS[tier(l)],
 				fillOpacity: l.passes_filters ? 0.95 : 0.6
 			})
-				.bindPopup(
+				// Details on hover; a click jumps to the card and keeps it highlighted
+				.bindTooltip(
 					`<strong>${esc(l.address ?? '')}</strong><br>${money(l.price)}/mo · ${esc(l.bedrooms_raw ?? l.bedrooms ?? '?')} bed` +
 						(sqft ? ` · ${sqft}` : '') +
-						`<br><a href="#l${l.id}" data-listing="${l.id}">Score ${l.score} · details ↓</a>`
+						`<br><span class="tip-hint">Score ${l.score} · click to view</span>`,
+					{ direction: 'top', offset: [0, -8], className: 'listing-tip' }
 				)
+				.on('mouseover', () => (hoveredId = l.id))
+				.on('mouseout', () => (hoveredId = null))
+				.on('click', () => selectListing(l.id))
 				.addTo(markerLayer);
 		}
 	}
@@ -160,7 +166,7 @@
 	<section class="list">
 		{#each data.listings as l (l.id)}
 			{@const sqft = formatSqft(l.sqft_min, l.sqft_max)}
-			<article id="l{l.id}" class="card" class:fail={!l.passes_filters} class:selected={selectedId === l.id}>
+			<article id="l{l.id}" class="card" class:fail={!l.passes_filters} class:selected={selectedId === l.id} class:hovered={hoveredId === l.id}>
 				<div class="card-top">
 					<div class="card-main">
 						<h2>
