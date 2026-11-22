@@ -22,7 +22,7 @@ Edit these in `src/lib/server/config.js`.
 
 | | |
 |---|---|
-| Hard filters | 3+ bedrooms (above grade, so "3+1" counts) · ≤ $3,500 · inside Finch–Eglinton / Bathurst–DVP · not basement/lower |
+| Hard filters | 3+ bedrooms (above grade, so "3+1" counts) · ≤ $3,500 · inside Finch–Eglinton / Bathurst–Victoria Park · not basement/lower |
 | Points | backyard +30 · 2+ parking +30 (1 spot +15) · garage or storage +25 · +3 per $100 under budget |
 | Penalty | −20 when a listing explicitly says a feature is missing |
 | Notify at | passes filters and score ≥ 50 |
@@ -87,7 +87,7 @@ npm run dev             # dashboard at http://localhost:5173 (any username + DAS
 
 ## Things to check
 
-- **The area polygon is approximate.** The points in `config.js` follow the major intersections along Finch, the DVP/404, Eglinton and Bathurst. Paste `AREA_GEOJSON` into [geojson.io](https://geojson.io) and nudge any edge that's off. Listings within a block of a boundary are where it matters.
+- **The area polygon is approximate.** The points in `config.js` follow the major intersections along Finch, Victoria Park, Eglinton and Bathurst. Changes take effect for existing listings on the next run. Paste `AREA_GEOJSON` into [geojson.io](https://geojson.io) and nudge any edge that's off. Listings within a block of a boundary are where it matters.
 - **Geocoding** uses LocationIQ (free key, 5,000 lookups/day; results cached in `geocode_cache`). Sign up at locationiq.com and set `LOCATIONIQ_KEY`. Without a key it falls back to public Nominatim, which usually refuses requests from Vercel. Listings that couldn't be located are retried on every run, and failures are logged in Vercel's function logs. Until a listing is located it passes with a `? location` tag, so check those by eye.
 - **Your first real emails:** after the first `ingest:local`, look at the `alert_emails` table. Any row with an `error`, or with `listing_count = 0` for a real alert, means that site's format needs a tweak to the prompt in `extract.js`.
 

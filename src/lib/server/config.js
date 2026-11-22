@@ -26,20 +26,20 @@ export const WEIGHTS = {
 };
 
 /**
- * Search area: Finch (north), Eglinton (south), Bathurst (west), DVP / 404 (east).
- * [lng, lat] pairs, traced along the actual roads at the major intersections.
- * These are approximate. Paste AREA_GEOJSON into https://geojson.io to check or redraw.
+ * Search area: Finch (north), Eglinton (south), Bathurst (west), Victoria Park (east).
+ * [lng, lat] pairs at the major intersections along those roads.
+ * Victoria Park points are from geocoded addresses at Finch, Sheppard and Eglinton; the rest are
+ * approximate. Paste AREA_GEOJSON into https://geojson.io to check or redraw.
  */
 export const AREA_POLYGON = [
 	[-79.444, 43.7745], // Bathurst & Finch
 	[-79.4155, 43.7804], // Yonge & Finch
 	[-79.3905, 43.785], // Bayview & Finch
 	[-79.37, 43.788], // Leslie & Finch
-	[-79.356, 43.7905], // Hwy 404 & Finch
-	[-79.35, 43.772], // 404 near Sheppard
-	[-79.34, 43.756], // DVP & York Mills
-	[-79.336, 43.739], // DVP & Lawrence
-	[-79.337, 43.72], // DVP & Eglinton
+	[-79.3315, 43.7947], // Victoria Park & Finch
+	[-79.3238, 43.7755], // Victoria Park & Sheppard
+	[-79.3025, 43.7255], // Victoria Park & Eglinton
+	[-79.337, 43.72], // Eglinton at the DVP
 	[-79.36, 43.7155], // Leslie & Eglinton
 	[-79.377, 43.7115], // Bayview & Eglinton
 	[-79.3985, 43.7066], // Yonge & Eglinton
@@ -49,6 +49,6 @@ export const AREA_POLYGON = [
 
 export const AREA_GEOJSON = {
 	type: 'Feature',
-	properties: { name: 'Finch–Eglinton / Bathurst–DVP' },
+	properties: { name: 'Finch–Eglinton / Bathurst–Victoria Park' },
 	geometry: { type: 'Polygon', coordinates: [AREA_POLYGON] }
 };

@@ -23,14 +23,18 @@ describe('search area polygon', () => {
 		'Bayview Village': [-79.38, 43.768],
 		'Lawrence Park': [-79.395, 43.725],
 		'Armour Heights': [-79.425, 43.74],
-		'York Mills & Leslie': [-79.363, 43.757]
+		'York Mills & Leslie': [-79.363, 43.757],
+		'Parkwoods (east of the DVP)': [-79.325, 43.76],
+		'Victoria Village': [-79.31, 43.735]
 	};
 	const outside = {
 		'Scarborough (current place)': [-79.25, 43.77],
 		'Yonge & Steeles': [-79.42, 43.797],
 		'West of Bathurst (Bathurst Manor)': [-79.455, 43.755],
 		'South of Eglinton (Davisville)': [-79.395, 43.698],
-		'East of DVP (Flemingdon)': [-79.325, 43.72]
+		'East of Victoria Park (Wexford)': [-79.295, 43.75],
+		'Warden & Sheppard': [-79.305, 43.78],
+		'South of Eglinton (Flemingdon)': [-79.33, 43.714]
 	};
 	for (const [name, [lng, lat]] of Object.entries(inside)) {
 		it(`includes ${name}`, () => expect(pointInPolygon(lng, lat)).toBe(true));

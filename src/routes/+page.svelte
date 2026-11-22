@@ -169,6 +169,7 @@
 
 		// Area outline and markers first, so they show even if the base map fails to load
 		const area = L.geoJSON(data.area, {
+			interactive: false, // decoration only: never block hovers/clicks on the markers
 			style: { color: '#2f2a3a', weight: 2, dashArray: '6 6', fillColor: '#b9adf0', fillOpacity: 0.18 }
 		}).addTo(map);
 		const fitArea = () => map.fitBounds(area.getBounds(), { padding: [16, 16] });
@@ -197,11 +198,8 @@
 			]);
 			setWorkerUrl(workerUrl);
 			// Map credits (OpenFreeMap, OpenMapTiles, OpenStreetMap) come from the style itself
+			// The base map goes in Leaflet's tile pane, underneath the area outline and markers
 			maplibreGL({ style: 'https://tiles.openfreemap.org/styles/liberty' }).addTo(map);
-			const area = L.geoJSON(data.area, {
-				interactive: false, // decoration only: never block hovers/clicks on the markers
-				style: { color: '#2f2a3a', weight: 2, dashArray: '6 6', fillColor: '#b9adf0', fillOpacity: 0.18 }
-			}).addTo(map);
 		} catch (err) {
 			// e.g. WebGL unavailable: fall back to standard OpenStreetMap tiles
 			console.warn('Vector map unavailable, using OSM tiles:', err);

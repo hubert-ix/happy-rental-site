@@ -121,20 +121,26 @@ export async function backfillLocations(env, supabase, limit = 20) {
 }
 
 /**
- * Re-apply the current scoring rules to every listing, so changes to criteria or weights in
- * config.js also reach listings that arrived earlier. Only rows whose result changed are written.
+ * Re-apply the current scoring rules and search area to every listing, so changes to criteria,
+ * weights or AREA_POLYGON in config.js also reach listings that arrived earlier.
+ * Only rows whose result changed are written.
  */
 export async function rescoreAll(supabase) {
 	const { data: rows } = await supabase.from('listings').select('*').not('status', 'in', '(gone,deleted)').limit(1000);
 	let changed = 0;
 	for (const row of rows || []) {
-		const { passes, score, notes } = scoreListing(row);
+		// Recheck the area too, so changes to AREA_POLYGON apply to listings located earlier
+		const in_area = row.lat == null || row.lng == null ? row.in_area : pointInPolygon(row.lng, row.lat);
+		const { passes, score, notes } = scoreListing({ ...row, in_area });
 		const same =
-			row.passes_filters === passes && row.score === score && JSON.stringify(row.score_notes) === JSON.stringify(notes);
+			row.in_area === in_area &&
+			row.passes_filters === passes &&
+			row.score === score &&
+			JSON.stringify(row.score_notes) === JSON.stringify(notes);
 		if (same) continue;
 		const { error } = await supabase
 			.from('listings')
-			.update({ passes_filters: passes, score, score_notes: notes })
+			.update({ in_area, passes_filters: passes, score, score_notes: notes })
 			.eq('id', row.id);
 		if (!error) changed++;
 	}

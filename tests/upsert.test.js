@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { upsertListing, applyManualEdit } from '../src/lib/server/ingest.js';
+import { upsertListing, applyManualEdit, rescoreAll } from '../src/lib/server/ingest.js';
 import { normalizeListing } from '../src/lib/server/extract.js';
 
 // Tiny in-memory stand-in for the parts of supabase-js that ingest uses.
@@ -15,6 +15,9 @@ function fakeSupabase() {
 			select: () => api,
 			eq: (k, v) => (filters.push([k, v]), op === 'update' ? run() : api),
 			limit: () => api,
+			not: () => api,
+			// awaiting a plain select (no .single()) returns every matching row
+			then: (resolve, reject) => (op === 'select' ? resolve({ data: rows(), error: null }) : reject(new Error('not awaitable'))),
 			maybeSingle: async () => ({ data: rows()[0] ?? null }),
 			single: async () => ({ data: op === 'insert' ? payload : rows()[0] ?? null, error: null }),
 			insert: (row) => {
@@ -192,5 +195,19 @@ describe('adding a listing by hand', () => {
 		expect(isNew).toBe(false);
 		expect(sb.tables.listings).toHaveLength(1);
 		expect(sb.tables.listings[0]).toMatchObject({ price: 2950, parking_spaces: 2 });
+	});
+});
+
+describe('rescoreAll', () => {
+	it('rechecks the area, so moving the boundary updates listings already saved', async () => {
+		const sb = fakeSupabase();
+		// A Parkwoods listing saved while the boundary was the DVP: marked outside the area
+		sb.tables.listings.push({
+			id: 1, status: 'new', address: '32 Marbury Crescent', price: 2975, bedrooms: 3, bedrooms_raw: '3',
+			lat: 43.76, lng: -79.325, in_area: false, passes_filters: false, score: 15, score_notes: ['✗ outside area']
+		});
+		const changed = await rescoreAll(sb);
+		expect(changed).toBe(1);
+		expect(sb.tables.listings[0]).toMatchObject({ in_area: true, passes_filters: true });
 	});
 });
