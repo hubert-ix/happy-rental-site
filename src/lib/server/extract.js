@@ -106,76 +106,80 @@ export function findMls(text = '') {
 	return m ? m[1].toUpperCase() : null;
 }
 
-const EXTRACT_TOOL = {
-	name: 'record_listings',
-	description: 'Record every distinct rental listing found in the email.',
-	// Grammar-constrained output: the input is guaranteed to match this schema (a real array, never a string)
+// One tool call per listing: far more reliable than asking for one big array in a single reply
+const RECORD_TOOL = {
+	name: 'record_listing',
+	description: 'Record ONE rental listing from the email. Call this once for every distinct listing.',
+	// Grammar-constrained output: each call is guaranteed to match this schema
 	strict: true,
 	input_schema: {
 		type: 'object',
 		properties: {
-			listings: {
-				type: 'array',
-				items: {
-					type: 'object',
-					properties: {
-						url: { type: ['string', 'null'], description: 'Link to this listing exactly as it appears in [brackets]' },
-						mls: { type: ['string', 'null'] },
-						address: { type: ['string', 'null'], description: 'Street address only, e.g. "79 McKee Avenue"' },
-						unit: { type: ['string', 'null'], description: 'e.g. "Main", "Upper", "Front", "Lower", "1203"' },
-						neighbourhood: { type: ['string', 'null'] },
-						price: { type: ['number', 'null'], description: 'Monthly rent in CAD' },
-						bedrooms_raw: { type: ['string', 'null'], description: 'As written, e.g. "3+1"' },
-						bathrooms: { type: ['number', 'null'] },
-						sqft_raw: { type: ['string', 'null'], description: 'Interior size as written, e.g. "1100-1500 sqft", "1,400 sq. ft."' },
-						parking_spaces: { type: ['number', 'null'] },
-						has_garage: { type: ['boolean', 'null'] },
-						has_backyard: { type: ['boolean', 'null'] },
-						has_storage: { type: ['boolean', 'null'] },
-						property_type: { type: ['string', 'null'], description: 'house, main floor, townhouse, condo, basement...' },
-						summary: { type: ['string', 'null'], description: 'One short sentence in your own words' }
-					},
-					required: ['url', 'address', 'price', 'bedrooms_raw'],
-					additionalProperties: false
-				}
-			}
+			url: { type: ['string', 'null'], description: 'Link to this listing exactly as it appears in [brackets]' },
+			mls: { type: ['string', 'null'] },
+			address: { type: ['string', 'null'], description: 'Street address only, e.g. "79 McKee Avenue"' },
+			unit: { type: ['string', 'null'], description: 'e.g. "Main", "Upper", "Front", "Lower", "1203"' },
+			neighbourhood: { type: ['string', 'null'] },
+			price: { type: ['number', 'null'], description: 'Monthly rent in CAD' },
+			bedrooms_raw: { type: ['string', 'null'], description: 'As written, e.g. "3+1"' },
+			bathrooms: { type: ['number', 'null'] },
+			sqft_raw: { type: ['string', 'null'], description: 'Interior size as written, e.g. "1100-1500 sqft", "1,400 sq. ft."' },
+			parking_spaces: { type: ['number', 'null'] },
+			has_garage: { type: ['boolean', 'null'] },
+			has_backyard: { type: ['boolean', 'null'] },
+			has_storage: { type: ['boolean', 'null'] },
+			property_type: { type: ['string', 'null'], description: 'house, main floor, townhouse, condo, basement...' },
+			summary: { type: ['string', 'null'], description: 'One short sentence in your own words' }
 		},
-		required: ['listings'],
+		required: ['url', 'address', 'price', 'bedrooms_raw'],
 		additionalProperties: false
 	}
 };
 
+const NO_LISTINGS_TOOL = {
+	name: 'no_listings',
+	description: 'Call this instead if the email contains no rental listings at all.',
+	strict: true,
+	input_schema: { type: 'object', properties: {}, additionalProperties: false }
+};
+
 const SYSTEM = `You extract rental listings from real-estate alert emails sent to a renter in Toronto.
 Rules:
-- One entry per distinct listing. Ignore ads, "similar homes" upsells, agent bios, and footer links.
+- Call record_listing once for EVERY distinct listing, in the order they appear. Emails often hold 20 or more; record them all.
+- Ignore ads, "similar homes" upsells, agent bios, and footer links.
 - Only record what the email states. Use null for anything not stated. Never guess.
 - Booleans: true if stated present, false only if explicitly stated absent ("no parking", "no yard access"), otherwise null.
 - A garage counts as has_garage=true; a shed, locker or "storage" counts as has_storage=true.
 - Exclusive or shared backyard access both count as has_backyard=true.
-- If an email is not a listing alert at all, return an empty list.`;
+- If the email holds no listings at all, call no_listings.`;
+
+const LISTINGS_PER_CALL = 20;
 
 /**
- * The tool's `listings` should be an array, but with long emails the model sometimes sends it as a
- * JSON string (or a single object). Accept all three shapes.
+ * Split long emails (e.g. a pasted page of search results) into chunks of about 20 listings,
+ * cutting only between lines, so each Claude call stays small and fast.
  */
-export function coerceListings(value) {
-	if (Array.isArray(value)) return value;
-	if (typeof value === 'string') {
-		// Strip ```json fences or stray text around the JSON before parsing
-		const cleaned = value.replace(/^\s*```(?:json)?|```\s*$/g, '').trim();
-		const start = cleaned.search(/[[{]/);
-		const end = Math.max(cleaned.lastIndexOf(']'), cleaned.lastIndexOf('}'));
-		try {
-			return coerceListings(JSON.parse(start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned));
-		} catch {
-			throw new Error(`Claude returned listings as text that is not valid JSON: ${value.slice(0, 200)}`);
+export function chunkByListings(text, perChunk = LISTINGS_PER_CALL) {
+	const chunks = [];
+	let current = [];
+	let count = 0;
+	for (const line of text.split('\n')) {
+		const links = extractListingLinks(line).length;
+		if (count + links > perChunk && current.length) {
+			chunks.push(current.join('\n'));
+			current = [];
+			count = 0;
 		}
+		current.push(line);
+		count += links;
 	}
-	if (value && typeof value === 'object') return Array.isArray(value.listings) ? value.listings : [value];
-	return [];
+	if (current.length) chunks.push(current.join('\n'));
+	return chunks;
 }
 
-function claudeRequest(env, { subject, from, text }, tool) {
+function claudeRequest(env, messages, { strict = true, first = true } = {}) {
+	const strip = ({ strict: _, ...tool }) => tool;
+	const tools = strict ? [RECORD_TOOL, NO_LISTINGS_TOOL] : [strip(RECORD_TOOL), strip(NO_LISTINGS_TOOL)];
 	return fetch('https://api.anthropic.com/v1/messages', {
 		method: 'POST',
 		headers: {
@@ -185,38 +189,84 @@ function claudeRequest(env, { subject, from, text }, tool) {
 		},
 		body: JSON.stringify({
 			model: env.ANTHROPIC_MODEL || 'claude-haiku-5-5',
-			// ~150 tokens per listing: room for a full page of pasted search results
-			max_tokens: 16000,
+			max_tokens: 16000, // ~250 tokens per call; 20 listings fit comfortably
 			system: SYSTEM,
-			tools: [tool],
-			tool_choice: { type: 'tool', name: tool.name },
-			messages: [
-				{
-					role: 'user',
-					content: `From: ${from}\nSubject: ${subject}\n\n${text.slice(0, 60_000)}`
-				}
-			]
+			tools,
+			// First turn must use a tool; later turns may stop once everything is recorded
+			tool_choice: first ? { type: 'any' } : { type: 'auto' },
+			messages
 		})
 	});
 }
 
-export async function extractWithClaude(env, email) {
-	let res = await claudeRequest(env, email, EXTRACT_TOOL);
-	if (res.status === 400) {
-		// If strict mode is ever rejected (model or schema not supported), retry without it once
-		const body = await res.text();
-		if (!/strict|schema/i.test(body)) throw new Error(`Claude extraction failed: 400 ${body}`);
-		console.warn(`Strict tool use rejected, retrying without it: ${body.slice(0, 200)}`);
-		const { strict, ...lenientTool } = EXTRACT_TOOL;
-		res = await claudeRequest(env, email, lenientTool);
+const MAX_TURNS = 8;
+
+/**
+ * Extract the listings in one chunk of text. Claude records listings with tool calls; after each
+ * reply we acknowledge them and let it continue, until it stops calling record_listing.
+ */
+async function extractChunk(env, { subject, from, text, expected }) {
+	const hint = expected
+		? `This email links to ${expected} individual listing pages, so expect about ${expected} record_listing calls.\n\n`
+		: '';
+	const messages = [{ role: 'user', content: `${hint}From: ${from}\nSubject: ${subject}\n\n${text}` }];
+	const found = [];
+	let strict = true;
+
+	for (let turn = 0; turn < MAX_TURNS; turn++) {
+		let res = await claudeRequest(env, messages, { strict, first: turn === 0 });
+		if (res.status === 400 && strict) {
+			// If strict mode is ever rejected (model or schema not supported), continue without it
+			const body = await res.text();
+			if (!/strict|schema/i.test(body)) throw new Error(`Claude extraction failed: 400 ${body}`);
+			console.warn(`Strict tool use rejected, retrying without it: ${body.slice(0, 200)}`);
+			strict = false;
+			res = await claudeRequest(env, messages, { strict, first: turn === 0 });
+		}
+		if (!res.ok) throw new Error(`Claude extraction failed: ${res.status} ${await res.text()}`);
+		const json = await res.json();
+
+		const calls = (json.content || []).filter((c) => c.type === 'tool_use');
+		const recorded = calls.filter((c) => c.name === RECORD_TOOL.name && c.input && typeof c.input === 'object');
+		found.push(...recorded.map((c) => c.input));
+
+		const done =
+			!recorded.length ||
+			calls.some((c) => c.name === NO_LISTINGS_TOOL.name) ||
+			json.stop_reason === 'end_turn' ||
+			(expected && found.length >= expected);
+		if (done) break;
+
+		// Acknowledge every call and ask for the rest
+		messages.push({ role: 'assistant', content: json.content });
+		messages.push({
+			role: 'user',
+			content: [
+				...calls.map((c) => ({ type: 'tool_result', tool_use_id: c.id, content: 'recorded' })),
+				{
+					type: 'text',
+					text: `Recorded ${found.length} so far. Continue with the next listings in the email; stop when every listing is recorded.`
+				}
+			]
+		});
 	}
-	if (!res.ok) throw new Error(`Claude extraction failed: ${res.status} ${await res.text()}`);
-	const json = await res.json();
-	if (json.stop_reason === 'max_tokens') {
-		throw new Error('Too many listings in one email for a single extraction; split it into smaller emails');
+	return found;
+}
+
+export async function extractWithClaude(env, { subject, from, text }) {
+	const all = [];
+	for (const chunk of chunkByListings(text.slice(0, 60_000))) {
+		const expected = extractListingLinks(chunk).length;
+		all.push(...(await extractChunk(env, { subject, from, text: chunk, expected })));
 	}
-	const call = json.content?.find((c) => c.type === 'tool_use');
-	return coerceListings(call?.input?.listings);
+	// A continuation turn can repeat a listing it already recorded: keep the first of each
+	const seen = new Set();
+	return all.filter((l) => {
+		const key = (l.url && normalizeUrl(l.url)) || `${l.address}|${l.unit}`.toLowerCase();
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
 }
 
 function toNumber(v) {

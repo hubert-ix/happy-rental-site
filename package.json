@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check",
     "test": "vitest run",
-    "ingest:local": "node --env-file=.env scripts/run-ingest-local.js"
+    "ingest:local": "node --env-file=.env scripts/run-ingest-local.js",
+    "debug-email": "node --env-file=.env scripts/debug-email.js"
   },
   "dependencies": {
     "@lucide/svelte": "^1.77.0",

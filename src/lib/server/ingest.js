@@ -123,7 +123,15 @@ export async function runIngest(env, { dashboardUrl } = {}) {
 		const doneSet = new Set((done || []).map((d) => d.gmail_id));
 		const todo = ids.filter((id) => !doneSet.has(id)).slice(0, max);
 
+		// Vercel stops functions at 60s: don't start a new email after ~40s; the rest wait for the next run
+		const started = Date.now();
+		const budgetMs = Number(env.INGEST_BUDGET_MS || 40_000);
+
 		for (const id of todo) {
+			if (Date.now() - started > budgetMs) {
+				summary.deferred = todo.length - summary.emailsProcessed;
+				break;
+			}
 			const record = { gmail_id: id, listing_count: 0, error: null };
 			try {
 				const email = await mailbox.getMessage(id);
