@@ -1,10 +1,11 @@
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { enhance } from '$app/forms';
 	import { Bed, Bath, Ruler, ExternalLink, MapPin, Check, X, Minus, CircleQuestionMark } from '@lucide/svelte';
 	import { formatSqft } from '$lib/format.js';
 	import { noteToTag, scoreTier } from '$lib/tags.js';
 	import 'leaflet/dist/leaflet.css';
+	import 'maplibre-gl/dist/maplibre-gl.css';
 	import './styles.css';
 
 	let { data } = $props();
@@ -13,8 +14,28 @@
 	let map;
 	let markerLayer;
 	let L;
+	let resizeObserver;
 
-	const TIER_COLOURS = { high: '#2f8f55', mid: '#d9822b', low: '#a89f91' };
+	// Card highlighted from a map popup's "details" link; cleared by clicking anywhere else or Esc
+	let selectedId = $state(null);
+
+	function onDocumentClick(e) {
+		const link = e.target.closest?.('a[data-listing]');
+		if (link) {
+			e.preventDefault();
+			selectedId = Number(link.dataset.listing);
+			map?.closePopup();
+			document.getElementById(`l${selectedId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+			return;
+		}
+		if (selectedId !== null && !e.target.closest?.(`#l${selectedId}`)) selectedId = null;
+	}
+
+	function onDocumentKeydown(e) {
+		if (e.key === 'Escape') selectedId = null;
+	}
+
+	const TIER_COLOURS = { high: '#2f9e74', mid: '#cdb52a', low: '#e0739a' };
 	const TAG_ICONS = { good: Check, bad: X, meh: Minus, unknown: CircleQuestionMark };
 
 	const money = (n) => (n ? '$' + Number(n).toLocaleString('en-CA') : '—');
@@ -43,7 +64,7 @@
 				.bindPopup(
 					`<strong>${esc(l.address ?? '')}</strong><br>${money(l.price)}/mo · ${esc(l.bedrooms_raw ?? l.bedrooms ?? '?')} bed` +
 						(sqft ? ` · ${sqft}` : '') +
-						`<br><a href="#l${l.id}">Score ${l.score} · details ↓</a>`
+						`<br><a href="#l${l.id}" data-listing="${l.id}">Score ${l.score} · details ↓</a>`
 				)
 				.addTo(markerLayer);
 		}
@@ -52,17 +73,56 @@
 	onMount(async () => {
 		L = (await import('leaflet')).default;
 		map = L.map(mapEl, { scrollWheelZoom: false, zoomSnap: 0.25 });
-		L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-			maxZoom: 19,
-			className: 'soft-tiles',
-			attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-		}).addTo(map);
+
+		// Area outline and markers first, so they show even if the base map fails to load
 		const area = L.geoJSON(data.area, {
-			style: { color: '#3d3328', weight: 2, dashArray: '6 6', fillColor: '#f1e6bf', fillOpacity: 0.25 }
+			style: { color: '#2f2a3a', weight: 2, dashArray: '6 6', fillColor: '#b9adf0', fillOpacity: 0.18 }
 		}).addTo(map);
-		map.fitBounds(area.getBounds(), { padding: [16, 16] });
+		const fitArea = () => map.fitBounds(area.getBounds(), { padding: [16, 16] });
+		fitArea();
+
+		// Leaflet measures its box once, at creation. If the layout shifts afterwards (web fonts
+		// loading, the page settling), tiles only fill part of the map. Re-measure on every size
+		// change, and keep the area framed until the user pans or zooms themselves.
+		let userMoved = false;
+		for (const ev of ['mousedown', 'touchstart', 'wheel']) mapEl.addEventListener(ev, () => (userMoved = true), { once: true, passive: true });
+		resizeObserver = new ResizeObserver(() => {
+			map.invalidateSize();
+			if (!userMoved) fitArea();
+		});
+		resizeObserver.observe(mapEl);
+
 		markerLayer = L.layerGroup().addTo(map);
 		drawMarkers();
+
+		// OpenFreeMap "liberty": a clean, Google-like vector style. Free, no key, no usage limits.
+		try {
+			const [{ setWorkerUrl }, { default: workerUrl }, { maplibreGL }] = await Promise.all([
+				import('maplibre-gl'),
+				// MapLibre renders in a web worker; point it at the file Vite actually serves
+				import('maplibre-gl/dist/maplibre-gl-worker.mjs?url'),
+				import('@maplibre/maplibre-gl-leaflet')
+			]);
+			setWorkerUrl(workerUrl);
+			// Map credits (OpenFreeMap, OpenMapTiles, OpenStreetMap) come from the style itself
+			maplibreGL({ style: 'https://tiles.openfreemap.org/styles/liberty' }).addTo(map);
+			const area = L.geoJSON(data.area, {
+				interactive: false, // decoration only: never block hovers/clicks on the markers
+				style: { color: '#2f2a3a', weight: 2, dashArray: '6 6', fillColor: '#b9adf0', fillOpacity: 0.18 }
+			}).addTo(map);
+		} catch (err) {
+			// e.g. WebGL unavailable: fall back to standard OpenStreetMap tiles
+			console.warn('Vector map unavailable, using OSM tiles:', err);
+			L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+				maxZoom: 19,
+				attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+			}).addTo(map);
+		}
+	});
+
+	onDestroy(() => {
+		resizeObserver?.disconnect();
+		map?.remove();
 	});
 
 	$effect(() => {
@@ -70,6 +130,8 @@
 		drawMarkers();
 	});
 </script>
+
+<svelte:document onclick={onDocumentClick} onkeydown={onDocumentKeydown} />
 
 <main class="dashboard">
 	<header class="masthead">
@@ -98,7 +160,7 @@
 	<section class="list">
 		{#each data.listings as l (l.id)}
 			{@const sqft = formatSqft(l.sqft_min, l.sqft_max)}
-			<article id="l{l.id}" class="card" class:fail={!l.passes_filters}>
+			<article id="l{l.id}" class="card" class:fail={!l.passes_filters} class:selected={selectedId === l.id}>
 				<div class="card-top">
 					<div class="card-main">
 						<h2>
