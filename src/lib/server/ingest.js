@@ -77,10 +77,39 @@ export async function upsertListing(env, supabase, l) {
 	return { id: data.id, isNew: true };
 }
 
+/**
+ * Retry geocoding for listings that still have no coordinates (e.g. the geocoder was down
+ * when they arrived), then re-check the area filter and rescore them.
+ */
+export async function backfillLocations(env, supabase, limit = 20) {
+	const { data: rows } = await supabase
+		.from('listings')
+		.select('*')
+		.is('lat', null)
+		.not('address', 'is', null)
+		.not('status', 'in', '(rejected,gone)')
+		.order('first_seen', { ascending: false })
+		.limit(limit);
+
+	let located = 0;
+	for (const row of rows || []) {
+		const hit = await geocode(env, supabase, row.address);
+		if (!hit) continue;
+		const updated = { ...row, ...hit, in_area: pointInPolygon(hit.lng, hit.lat) };
+		const { passes, score, notes } = scoreListing(updated);
+		const { error } = await supabase
+			.from('listings')
+			.update({ lat: hit.lat, lng: hit.lng, in_area: updated.in_area, passes_filters: passes, score, score_notes: notes })
+			.eq('id', row.id);
+		if (!error) located++;
+	}
+	return located;
+}
+
 export async function runIngest(env, { dashboardUrl } = {}) {
 	const supabase = db(env);
 	const max = Number(env.MAX_EMAILS_PER_RUN || 15);
-	const summary = { emailsFound: 0, emailsProcessed: 0, listingsSeen: 0, newListings: 0, notified: 0, errors: [] };
+	const summary = { emailsFound: 0, emailsProcessed: 0, listingsSeen: 0, newListings: 0, located: 0, notified: 0, errors: [] };
 
 	const mailbox = await openMailbox(env);
 	try {
@@ -116,6 +145,8 @@ export async function runIngest(env, { dashboardUrl } = {}) {
 	} finally {
 		await mailbox.close();
 	}
+
+	summary.located = await backfillLocations(env, supabase);
 
 	const { data: matches } = await supabase
 		.from('listings')

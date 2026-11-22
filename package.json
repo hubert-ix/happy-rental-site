@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "vite dev --port 4000",
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check",
@@ -12,6 +12,7 @@
     "ingest:local": "node --env-file=.env scripts/run-ingest-local.js"
   },
   "dependencies": {
+    "@lucide/svelte": "^1.77.0",
     "@supabase/supabase-js": "^2.119.2",
     "imapflow": "^2.12.2",
     "leaflet": "^1.9.4",

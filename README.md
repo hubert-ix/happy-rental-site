@@ -9,7 +9,7 @@ Saved searches on each site ──► Gmail (label: rental-alerts)
                                       │  every 30 min (or daily)
                                       ▼
                          /api/ingest (SvelteKit on Vercel)
-        Gmail IMAP → Claude extracts fields → Nominatim geocode
+        Gmail IMAP → Claude extracts fields → LocationIQ geocode
                  → inside polygon? → score → merge duplicates
                                       │
                     Supabase (listings) ──► Dashboard (map + list + status)
@@ -88,7 +88,7 @@ npm run dev             # dashboard at http://localhost:5173 (any username + DAS
 ## Things to check
 
 - **The area polygon is approximate.** The points in `config.js` follow the major intersections along Finch, the DVP/404, Eglinton and Bathurst. Paste `AREA_GEOJSON` into [geojson.io](https://geojson.io) and nudge any edge that's off. Listings within a block of a boundary are where it matters.
-- **Geocoding** uses OpenStreetMap Nominatim (free, 1 request/second, results cached). When an address can't be found, the listing still passes with a `? location` tag, so check those by eye.
+- **Geocoding** uses LocationIQ (free key, 5,000 lookups/day; results cached in `geocode_cache`). Sign up at locationiq.com and set `LOCATIONIQ_KEY`. Without a key it falls back to public Nominatim, which usually refuses requests from Vercel. Listings that couldn't be located are retried on every run, and failures are logged in Vercel's function logs. Until a listing is located it passes with a `? location` tag, so check those by eye.
 - **Your first real emails:** after the first `ingest:local`, look at the `alert_emails` table. Any row with an `error`, or with `listing_count = 0` for a real alert, means that site's format needs a tweak to the prompt in `extract.js`.
 
 ## Files
@@ -97,7 +97,7 @@ npm run dev             # dashboard at http://localhost:5173 (any username + DAS
 src/lib/server/config.js    criteria, weights, polygon   ← edit me
 src/lib/server/gmail.js     Gmail IMAP read + SMTP send (app password)
 src/lib/server/extract.js   HTML→text, link/MLS detection, Claude extraction, normalising, dedupe keys
-src/lib/server/geo.js       point-in-polygon + cached Nominatim geocoding
+src/lib/server/geo.js       point-in-polygon + cached geocoding (LocationIQ, Nominatim fallback)
 src/lib/server/score.js     hard filters + scoring
 src/lib/server/ingest.js    the pipeline + cross-site merge
 src/lib/server/notify.js    email digest + ntfy push
