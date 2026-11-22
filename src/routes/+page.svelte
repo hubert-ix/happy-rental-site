@@ -312,32 +312,54 @@
 				<div class="card-actions">
 					<form method="POST" action="?/status" use:enhance class="status">
 						<input type="hidden" name="id" value={l.id} />
-						{#each data.statuses as s}
-							<button name="status" value={s} class:current={l.status === s} aria-pressed={l.status === s}>{s}</button>
-						{/each}
+						<!-- Saves as soon as you pick a status -->
+						<select
+							name="status"
+							aria-label="Status"
+							data-status={l.status}
+							onchange={(e) => e.currentTarget.form.requestSubmit()}
+						>
+							{#each data.statuses as s}
+								<option value={s} selected={l.status === s}>{s[0].toUpperCase() + s.slice(1)}</option>
+							{/each}
+						</select>
 					</form>
-					<div class="row-buttons">
-						<button type="button" class="edit-btn" onclick={() => ((editingId = l.id), (editError = null))}>
-							<Pencil size={14} />Edit
-						</button>
-						{#if confirmDeleteId === l.id}
-							<form method="POST" action="?/delete" use:enhance class="confirm-delete">
-								<input type="hidden" name="id" value={l.id} />
-								<span>Delete this listing?</span>
-								<button type="submit" class="danger">Delete</button>
-								<button type="button" class="cancel" onclick={() => (confirmDeleteId = null)}>Cancel</button>
-							</form>
-						{:else}
-							<button type="button" class="edit-btn delete-btn" onclick={() => (confirmDeleteId = l.id)}>
-								<Trash2 size={14} />Delete
-							</button>
-						{/if}
-					</div>
+
 					<form method="POST" action="?/note" use:enhance class="note">
 						<input type="hidden" name="id" value={l.id} />
 						<input name="notes" aria-label="Notes" placeholder="Notes (asked about garage, viewing Tue…)" value={l.notes ?? ''} />
 						<button>Save</button>
 					</form>
+
+					{#if confirmDeleteId === l.id}
+						<form method="POST" action="?/delete" use:enhance class="confirm-delete">
+							<input type="hidden" name="id" value={l.id} />
+							<span>Delete?</span>
+							<button type="submit" class="danger">Delete</button>
+							<button type="button" class="cancel" onclick={() => (confirmDeleteId = null)}>Cancel</button>
+						</form>
+					{:else}
+						<div class="icon-buttons">
+							<button
+								type="button"
+								class="icon-btn"
+								title="Edit title and price"
+								aria-label="Edit listing"
+								onclick={() => ((editingId = l.id), (editError = null))}
+							>
+								<Pencil size={16} />
+							</button>
+							<button
+								type="button"
+								class="icon-btn danger"
+								title="Delete listing"
+								aria-label="Delete listing"
+								onclick={() => (confirmDeleteId = l.id)}
+							>
+								<Trash2 size={16} />
+							</button>
+						</div>
+					{/if}
 				</div>
 			</article>
 		{/each}

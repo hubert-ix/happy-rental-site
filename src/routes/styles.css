@@ -304,7 +304,6 @@ body {
 
 .dashboard .score:hover {
   transform: scale(1.06);
-  box-shadow: 0 2px 8px rgba(var(--shadow), 0.15);
 }
 
 /* a score you set yourself gets an outer ring */
@@ -374,6 +373,7 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   margin-top: 3px;
+  display: none;
 }
 
 .dashboard .tier-high { background: var(--high-bg); color: var(--high-ink); }
@@ -421,51 +421,47 @@ body {
 .dashboard .card-actions {
   margin-top: 18px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
-  justify-content: space-between;
 }
 
 .dashboard .status {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  padding: 4px;
-  background: var(--lavender);
+  flex-shrink: 0;
+}
+
+.dashboard .status select {
+  appearance: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 9px 36px 9px 16px;
   border: 1px solid var(--line);
   border-radius: 999px;
-}
-
-.dashboard .status button {
-  font: inherit;
-  font-size: 13px;
-  padding: 5px 12px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
+  background-color: var(--lavender);
+  color: var(--ink);
   cursor: pointer;
-  text-transform: capitalize;
-  transition: background 0.15s, color 0.15s;
+  /* chevron */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%232f2a3a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
 }
 
-.dashboard .status button:hover {
-  color: var(--ink);
+.dashboard .status select:hover {
+  border-color: var(--ink);
 }
 
-.dashboard .status button.current {
-  background: #fff;
-  color: var(--ink);
-  font-weight: 600;
-  box-shadow: 0 1px 3px rgba(var(--shadow), 0.15);
-}
+/* tint the dropdown by status */
+.dashboard .status select[data-status='shortlisted'] { background-color: var(--good-bg); }
+.dashboard .status select[data-status='contacted'],
+.dashboard .status select[data-status='viewing'] { background-color: var(--lemon); }
+.dashboard .status select[data-status='rejected'],
+.dashboard .status select[data-status='gone'] { background-color: var(--bad-bg); }
 
 .dashboard .note {
   display: flex;
   gap: 8px;
   flex: 1;
-  min-width: 260px;
+  min-width: 0;
 }
 
 .dashboard .note input {
@@ -531,57 +527,70 @@ body {
     font-size: 18px;
   }
 
-  /* one swipeable row instead of wrapping onto several lines */
-  .dashboard .tabs,
-  .dashboard .status {
+  /* one swipeable row of tabs instead of wrapping onto several lines */
+  .dashboard .tabs {
     flex-wrap: nowrap;
     overflow-x: auto;
     scrollbar-width: none;
-  }
-
-  .dashboard .tabs {
     margin: 0 -14px;
     padding: 0 14px;
   }
 
-  .dashboard .tabs::-webkit-scrollbar,
-  .dashboard .status::-webkit-scrollbar {
+  .dashboard .tabs::-webkit-scrollbar {
     display: none;
   }
 
-  .dashboard .tabs a,
-  .dashboard .status button {
+  .dashboard .tabs a {
     flex-shrink: 0;
   }
 
-  .dashboard .status {
-    max-width: 100%;
+  /* status + icons on the first line, notes underneath */
+  .dashboard .card-actions {
+    flex-wrap: wrap;
+  }
+
+  .dashboard .icon-buttons {
+    margin-left: auto;
   }
 
   .dashboard .note {
-    min-width: 100%;
+    order: 3;
+    flex-basis: 100%;
   }
 }
 
 /* ---------- editing a listing ---------- */
 
-.dashboard .edit-btn {
-  display: inline-flex;
-  align-items: center;
+.dashboard .icon-buttons {
+  display: flex;
   gap: 6px;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 8px 14px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--card);
-  color: var(--ink);
-  cursor: pointer;
+  flex-shrink: 0;
 }
 
-.dashboard .edit-btn:hover {
+.dashboard .icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.dashboard .icon-btn:hover {
   background: var(--lavender);
+  color: var(--ink);
+}
+
+.dashboard .icon-btn.danger:hover {
+  background: var(--bad-bg);
+  border-color: var(--bad-bg);
+  color: var(--bad-ink);
 }
 
 .dashboard .edited {
@@ -665,19 +674,8 @@ body {
 
 /* ---------- deleting a listing ---------- */
 
-.dashboard .row-buttons {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.dashboard .delete-btn:hover {
-  background: var(--bad-bg);
-  color: var(--bad-ink);
-  border-color: var(--bad-bg);
-}
-
 .dashboard .confirm-delete {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 6px;
