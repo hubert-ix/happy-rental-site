@@ -214,7 +214,7 @@ export async function runIngest(env, { dashboardUrl } = {}) {
 }
 
 // Fields that can be set by hand, from the edit form or the "Add listing" form
-const EDITABLE = ['address', 'unit', 'price', 'bedrooms_raw', 'bathrooms', 'parking_spaces', 'has_backyard', 'has_garage', 'has_storage', 'url'];
+const EDITABLE = ['address', 'unit', 'price', 'bedrooms_raw', 'bathrooms', 'parking_spaces', 'has_backyard', 'has_garage', 'has_storage', 'url', 'summary'];
 
 /**
  * Apply values set on the dashboard. Every field that changes is locked so later emails don't
@@ -263,7 +263,7 @@ export async function applyManualEdit(env, supabase, id, fields) {
  */
 export async function addManualListing(env, supabase, fields, notes) {
 	if (!fields.address) throw new Error('An address or title is required');
-	const listing = normalizeListing({ ...fields, summary: null }, 'manual');
+	const listing = normalizeListing(fields, 'manual');
 	const { id, isNew } = await upsertListing(env, supabase, listing);
 
 	const entered = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== null && v !== undefined && v !== ''));

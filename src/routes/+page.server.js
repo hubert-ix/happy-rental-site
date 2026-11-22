@@ -35,6 +35,44 @@ export async function load({ url }) {
 	};
 }
 
+/**
+ * Read the add/edit listing form. Empty text and number fields become null. Toggles send "yes",
+ * "no" or nothing: when adding, nothing means not mentioned (null); when editing, it means
+ * "leave as it is" (undefined, so applyManualEdit skips it).
+ */
+function readListingForm(form, { editing }) {
+	const text = (name) => String(form.get(name) ?? '').trim() || null;
+	const number = (name) => {
+		const raw = text(name)?.replace(/[$,\s]/g, '');
+		return raw ? Number(raw) : null;
+	};
+	const toggle = (name) => ({ yes: true, no: false })[text(name)] ?? (editing ? undefined : null);
+
+	const fields = {
+		address: text('address'),
+		unit: text('unit'),
+		price: number('price'),
+		bedrooms_raw: text('bedrooms'),
+		bathrooms: number('bathrooms'),
+		parking_spaces: number('parking_spaces'),
+		has_backyard: toggle('has_backyard'),
+		has_garage: toggle('has_garage'),
+		has_storage: toggle('has_storage'),
+		url: text('url'),
+		summary: text('summary')
+	};
+
+	let problem = null;
+	if (!fields.address) problem = 'Enter an address or a title';
+	for (const [name, value] of Object.entries({ price: fields.price, bathrooms: fields.bathrooms, parking: fields.parking_spaces })) {
+		if (value !== null && (!Number.isFinite(value) || value < 0)) problem = `Check the ${name}`;
+	}
+	if (fields.url && !/^https?:\/\//i.test(fields.url)) problem = 'The link must start with http:// or https://';
+	if (fields.price !== null && Number.isFinite(fields.price) && !Number.isInteger(fields.price)) problem = 'Price must be a whole number of dollars';
+
+	return { fields, notes: text('notes'), problem };
+}
+
 export const actions = {
 	status: async ({ request }) => {
 		const form = await request.formData();
@@ -61,51 +99,24 @@ export const actions = {
 	edit: async ({ request }) => {
 		const form = await request.formData();
 		const id = Number(form.get('id'));
-		const address = String(form.get('address') ?? '').trim();
-		const rawPrice = String(form.get('price') ?? '').replace(/[$,\s]/g, '');
-		const price = rawPrice === '' ? null : Number(rawPrice);
 		if (!id) return fail(400, { message: 'Missing listing id' });
-		if (!address) return fail(400, { message: 'Title cannot be empty' });
-		if (price !== null && (!Number.isInteger(price) || price < 0 || price > 100_000)) {
-			return fail(400, { message: 'Price must be a whole number of dollars' });
-		}
+		const { fields, notes, problem } = readListingForm(form, { editing: true });
+		if (problem) return fail(400, { message: problem });
 		try {
-			await applyManualEdit(env, db(env), id, { address, price });
+			const supabase = db(env);
+			const row = await applyManualEdit(env, supabase, id, fields);
+			if ((row.notes ?? null) !== notes) await supabase.from('listings').update({ notes }).eq('id', id);
 		} catch (err) {
 			return fail(500, { message: err.message });
 		}
 		return { ok: true };
 	},
+
 	add: async ({ request }) => {
-		const form = await request.formData();
-		const text = (name) => String(form.get(name) ?? '').trim() || null;
-		const number = (name) => {
-			const raw = text(name)?.replace(/[$,\s]/g, '');
-			return raw ? Number(raw) : null;
-		};
-		const yesNo = (name) => ({ yes: true, no: false })[text(name)] ?? null;
-
-		const fields = {
-			address: text('address'),
-			unit: text('unit'),
-			price: number('price'),
-			bedrooms_raw: text('bedrooms'),
-			bathrooms: number('bathrooms'),
-			parking_spaces: number('parking_spaces'),
-			has_backyard: yesNo('has_backyard'),
-			has_garage: yesNo('has_garage'),
-			has_storage: yesNo('has_storage'),
-			url: text('url')
-		};
-
-		if (!fields.address) return fail(400, { message: 'Enter an address or a title' });
-		for (const [name, value] of Object.entries({ price: fields.price, bathrooms: fields.bathrooms, parking: fields.parking_spaces })) {
-			if (value !== null && (!Number.isFinite(value) || value < 0)) return fail(400, { message: `Check the ${name}` });
-		}
-		if (fields.url && !/^https?:\/\//i.test(fields.url)) return fail(400, { message: 'The link must start with http:// or https://' });
-
+		const { fields, notes, problem } = readListingForm(await request.formData(), { editing: false });
+		if (problem) return fail(400, { message: problem });
 		try {
-			const { id, isNew } = await addManualListing(env, db(env), fields, text('notes'));
+			const { id, isNew } = await addManualListing(env, db(env), fields, notes);
 			return { added: true, id, isNew };
 		} catch (err) {
 			return fail(500, { message: err.message });

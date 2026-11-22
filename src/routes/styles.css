@@ -482,22 +482,6 @@ body {
   background: #fff;
 }
 
-.dashboard .note button {
-  font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  padding: 9px 20px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--dark);
-  color: #fff;
-  cursor: pointer;
-}
-
-.dashboard .note button:hover {
-  background: var(--dark-hover);
-}
-
 .dashboard :focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
@@ -605,52 +589,14 @@ body {
   border-radius: 999px;
 }
 
-.dashboard .listing-edit {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 10px 12px;
-}
-
-.dashboard .listing-edit label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1 1 260px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-}
-
-.dashboard .listing-edit label.price-field {
-  flex: 0 1 150px;
-}
-
-.dashboard .listing-edit input {
-  font: inherit;
-  font-size: 15px;
-  font-weight: 500;
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--lavender-soft);
-  color: var(--ink);
-}
-
-.dashboard .listing-edit input:focus {
-  outline: none;
-  border-color: var(--ink);
-  background: #fff;
-}
-
-.dashboard .listing-edit-actions {
+.dashboard .form-actions {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-basis: 100%;
 }
 
-.dashboard .listing-edit-actions button {
+.dashboard .form-actions button {
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -662,12 +608,12 @@ body {
   cursor: pointer;
 }
 
-.dashboard .listing-edit-actions .cancel {
+.dashboard .form-actions .cancel {
   background: var(--lavender);
   color: var(--ink);
 }
 
-.dashboard .edit-error {
+.dashboard .form-error {
   font-size: 13px;
   color: var(--bad-ink);
 }
@@ -733,22 +679,22 @@ body {
   background: var(--dark-hover);
 }
 
-.dashboard .add-form h2 {
+.dashboard .listing-form h2 {
   margin-bottom: 16px;
 }
 
-.dashboard .add-grid {
+.dashboard .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
 
-.dashboard .add-grid .wide {
+.dashboard .form-grid .wide {
   grid-column: 1 / -1;
 }
 
-.dashboard .add-grid label {
+.dashboard .form-grid label {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -757,8 +703,9 @@ body {
   color: var(--muted);
 }
 
-.dashboard .add-grid input,
-.dashboard .add-grid select {
+.dashboard .form-grid input,
+.dashboard .form-grid select,
+.dashboard .form-grid textarea {
   font: inherit;
   font-size: 15px;
   font-weight: 500;
@@ -769,8 +716,9 @@ body {
   color: var(--ink);
 }
 
-.dashboard .add-grid input:focus,
-.dashboard .add-grid select:focus {
+.dashboard .form-grid input:focus,
+.dashboard .form-grid select:focus,
+.dashboard .form-grid textarea:focus {
   outline: none;
   border-color: var(--ink);
   background: #fff;
@@ -782,4 +730,88 @@ body {
   border-radius: 12px;
   background: var(--lemon);
   font-size: 14px;
+}
+
+/* ---------- add / edit form: summary ---------- */
+
+.dashboard .form-grid textarea {
+  resize: vertical;
+  min-height: 3.2em;
+  line-height: 1.45;
+}
+
+/* ---------- add / edit form: toggles ---------- */
+
+.dashboard .toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  padding: 4px 0;
+}
+
+.dashboard .toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.dashboard .toggle .track {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--line-dashed);
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.dashboard .toggle .thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(var(--shadow), 0.3);
+  transition: transform 0.2s;
+}
+
+.dashboard .toggle[aria-checked='true'] .track {
+  background: var(--good-ink);
+}
+
+.dashboard .toggle[aria-checked='true'] .thumb {
+  transform: translateX(18px);
+}
+
+/* ---------- notes: auto-save confirmation ---------- */
+
+.dashboard .note {
+  position: relative;
+}
+
+.dashboard .note .saved {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--good-ink);
+  pointer-events: none;
+  animation: saved-fade 1.8s ease forwards;
+}
+
+@keyframes saved-fade {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; }
 }

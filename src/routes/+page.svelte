@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { Bed, Bath, Ruler, ExternalLink, MapPin, Check, X, Minus, CircleQuestionMark, Pencil, Trash2, Plus } from '@lucide/svelte';
 	import { formatSqft } from '$lib/format.js';
+	import ListingForm from '$lib/components/ListingForm.svelte';
 	import { noteToTag, scoreTier } from '$lib/tags.js';
 	import 'leaflet/dist/leaflet.css';
 	import 'maplibre-gl/dist/maplibre-gl.css';
@@ -45,43 +46,37 @@
 
 	// "Add listing" form
 	let adding = $state(false);
-	let addError = $state(null);
 	let addMessage = $state(null);
 
-	const afterAdd = () => async ({ result, update }) => {
-		if (result.type === 'failure') {
-			addError = result.data?.message ?? 'Could not add the listing';
-			return;
-		}
-		await update(); // refresh the list
-		addError = null;
+	async function handleAdded({ id, isNew } = {}) {
 		adding = false;
-		const { id, isNew } = result.data ?? {};
 		addMessage = isNew ? null : 'That listing was already in your list, so it was updated with what you entered.';
 		if (!id) return;
 		// Show the new card; it may be filtered out of the current view (e.g. Matches)
 		if (!document.getElementById(`l${id}`)) await goto('?view=all', { noScroll: true });
 		await tick();
 		selectListing(id);
+	}
+
+	// Note that just auto-saved, for a brief "Saved" confirmation
+	let savedNoteId = $state(null);
+	const afterNote = (id) => async ({ result, update }) => {
+		await update({ reset: false });
+		if (result.type !== 'success') return;
+		savedNoteId = id;
+		setTimeout(() => savedNoteId === id && (savedNoteId = null), 1800);
 	};
+	// Save the note when the field loses focus, if it changed
+	function saveNoteOnBlur(e, l) {
+		if (e.currentTarget.value.trim() !== (l.notes ?? '').trim()) e.currentTarget.form.requestSubmit();
+	}
 
 	// Listing waiting for its delete to be confirmed
 	let confirmDeleteId = $state(null);
 
 	// Listing whose title and price are being edited
 	let editingId = $state(null);
-	let editError = $state(null);
 	const isLocked = (l, field) => (l.locked_fields || []).includes(field);
-
-	const afterEdit = () => async ({ result, update }) => {
-		if (result.type === 'failure') {
-			editError = result.data?.message ?? 'Could not save';
-			return;
-		}
-		await update();
-		editError = null;
-		editingId = null;
-	};
 
 	// Score you set by hand wins over the computed one
 	let editingScoreId = $state(null);
@@ -218,7 +213,7 @@
 					<a href="?view={v}" class:active={v === data.view} aria-current={v === data.view ? 'page' : undefined}>{v}</a>
 				{/each}
 			</nav>
-			<button type="button" class="add-btn" onclick={() => ((adding = !adding), (addError = null), (addMessage = null))}>
+			<button type="button" class="add-btn" onclick={() => ((adding = !adding), (addMessage = null))}>
 				<Plus size={16} />Add listing
 			</button>
 		</div>
@@ -229,58 +224,9 @@
 	{#if addMessage}<p class="add-message" role="status">{addMessage}</p>{/if}
 
 	{#if adding}
-		<form method="POST" action="?/add" use:enhance={afterAdd} class="card add-form">
-			<h2>Add a listing</h2>
-			<div class="add-grid">
-				<label class="wide">
-					<span>Address or title *</span>
-					<input name="address" required maxlength="200" placeholder="79 McKee Avenue" use:focusAndSelect />
-				</label>
-				<label>
-					<span>Price / month</span>
-					<input name="price" type="number" min="0" step="1" placeholder="3300" />
-				</label>
-				<label>
-					<span>Unit</span>
-					<input name="unit" maxlength="40" placeholder="Main floor" />
-				</label>
-				<label>
-					<span>Bedrooms</span>
-					<input name="bedrooms" maxlength="10" placeholder="3 or 3+1" />
-				</label>
-				<label>
-					<span>Bathrooms</span>
-					<input name="bathrooms" type="number" min="0" step="0.5" placeholder="1" />
-				</label>
-				<label>
-					<span>Parking spaces</span>
-					<input name="parking_spaces" type="number" min="0" step="1" placeholder="2" />
-				</label>
-				{#each [['has_backyard', 'Backyard'], ['has_garage', 'Garage'], ['has_storage', 'Storage']] as [name, label]}
-					<label>
-						<span>{label}</span>
-						<select name={name}>
-							<option value="">Don't know</option>
-							<option value="yes">Yes</option>
-							<option value="no">No</option>
-						</select>
-					</label>
-				{/each}
-				<label class="wide">
-					<span>Link</span>
-					<input name="url" type="url" maxlength="500" placeholder="https://…" />
-				</label>
-				<label class="wide">
-					<span>Notes</span>
-					<input name="notes" maxlength="2000" placeholder="Saw it on Facebook, landlord is Maria…" />
-				</label>
-			</div>
-			<div class="listing-edit-actions">
-				<button type="submit">Add listing</button>
-				<button type="button" class="cancel" onclick={() => ((adding = false), (addError = null))}>Cancel</button>
-				{#if addError}<span class="edit-error" role="alert">{addError}</span>{/if}
-			</div>
-		</form>
+		<div class="card form-card">
+			<ListingForm heading="Add a listing" submitLabel="Add listing" onCancel={() => (adding = false)} onDone={handleAdded} />
+		</div>
 	{/if}
 
 	{#if !data.listings.length}
@@ -295,33 +241,17 @@
 		{#each data.listings as l (l.id)}
 			{@const sqft = formatSqft(l.sqft_min, l.sqft_max)}
 			<article id="l{l.id}" class="card" class:fail={!l.passes_filters} class:selected={selectedId === l.id} class:hovered={hoveredId === l.id}>
-				<div class="card-top">
-					<div class="card-main">
-						{#if editingId === l.id}
-							<form method="POST" action="?/edit" use:enhance={afterEdit} class="listing-edit">
-								<input type="hidden" name="id" value={l.id} />
-								<label>
-									<span>Title</span>
-									<input name="address" value={l.address ?? ''} required maxlength="200" use:focusAndSelect />
-								</label>
-								<label class="price-field">
-									<span>Price / month</span>
-									<input name="price" type="number" min="0" max="100000" step="1" value={l.price ?? ''} placeholder="unknown" />
-								</label>
-								<div class="listing-edit-actions">
-									<button type="submit">Save</button>
-									<button type="button" class="cancel" onclick={() => ((editingId = null), (editError = null))}>Cancel</button>
-									{#if editError}<span class="edit-error" role="alert">{editError}</span>{/if}
-								</div>
-							</form>
-						{:else}
+				{#if editingId === l.id}
+					<ListingForm listing={l} heading="Edit listing" submitLabel="Save changes" onCancel={() => (editingId = null)} onDone={() => (editingId = null)} />
+				{:else}
+					<div class="card-top">
+						<div class="card-main">
 							<h2>
 								{#if l.url}
 									<a href={l.url} target="_blank" rel="noopener">{l.address ?? 'Listing'}</a>
 								{:else}
 									{l.address ?? 'Listing'}
 								{/if}
-								{#if l.unit}<span class="unit">{l.unit}</span>{/if}
 								{#if (l.locked_fields || []).length && l.sources.some((s) => s !== 'manual')}
 									<span class="edited" title="You edited this listing; new emails won't overwrite your changes">edited</span>
 								{/if}
@@ -346,108 +276,115 @@
 									· {ago(l.first_seen)}
 								</span>
 							</div>
+						</div>
+
+						{#if editingScoreId === l.id}
+							<form method="POST" action="?/score" use:enhance={afterScoreSave} class="score-edit">
+								<input type="hidden" name="id" value={l.id} />
+								<input
+									name="score"
+									type="number"
+									min="0"
+									max="999"
+									step="1"
+									value={scoreOf(l)}
+									aria-label="Your score for {l.address ?? 'this listing'}"
+									use:focusAndSelect
+								/>
+								<div class="score-edit-actions">
+									<button type="submit">Save</button>
+									{#if isManual(l)}
+										<button type="submit" name="reset" value="1" class="reset" title="Back to the computed score ({l.score})">
+											Reset
+										</button>
+									{/if}
+									<button type="button" class="cancel" onclick={() => (editingScoreId = null)}>Cancel</button>
+								</div>
+							</form>
+						{:else}
+							<button
+								type="button"
+								class="score tier-{tier(l)}"
+								class:manual={isManual(l)}
+								title={isManual(l) ? `Your score (computed: ${l.score}). Click to change` : 'Match score. Click to set your own'}
+								onclick={() => (editingScoreId = l.id)}
+							>
+								<span class="score-value">{scoreOf(l)}</span>
+								<span class="score-label">{isManual(l) ? 'yours' : 'score'}</span>
+							</button>
 						{/if}
 					</div>
 
-					{#if editingScoreId === l.id}
-						<form method="POST" action="?/score" use:enhance={afterScoreSave} class="score-edit">
+					{#if l.summary}<p class="summary">{l.summary}</p>{/if}
+
+					<ul class="tags">
+						{#each l.score_notes as note}
+							{@const tag = noteToTag(note)}
+							{@const Icon = tag.isPlace ? MapPin : TAG_ICONS[tag.kind]}
+							<li class="tag {tag.kind}"><Icon size={13} />{tag.label}</li>
+						{/each}
+					</ul>
+
+					<div class="card-actions">
+						<form method="POST" action="?/status" use:enhance class="status">
 							<input type="hidden" name="id" value={l.id} />
+							<!-- Saves as soon as you pick a status -->
+							<select
+								name="status"
+								aria-label="Status"
+								data-status={l.status}
+								onchange={(e) => e.currentTarget.form.requestSubmit()}
+							>
+								{#each data.statuses as s}
+									<option value={s} selected={l.status === s}>{s[0].toUpperCase() + s.slice(1)}</option>
+								{/each}
+							</select>
+						</form>
+
+						<form method="POST" action="?/note" use:enhance={() => afterNote(l.id)} class="note">
+							<input type="hidden" name="id" value={l.id} />
+							<!-- Saves when you click away (or press Enter) -->
 							<input
-								name="score"
-								type="number"
-								min="0"
-								max="999"
-								step="1"
-								value={scoreOf(l)}
-								aria-label="Your score for {l.address ?? 'this listing'}"
-								use:focusAndSelect
+								name="notes"
+								aria-label="Notes"
+								placeholder="Notes (asked about garage, viewing Tue…)"
+								value={l.notes ?? ''}
+								onblur={(e) => saveNoteOnBlur(e, l)}
 							/>
-							<div class="score-edit-actions">
-								<button type="submit">Save</button>
-								{#if isManual(l)}
-									<button type="submit" name="reset" value="1" class="reset" title="Back to the computed score ({l.score})">
-										Reset
-									</button>
-								{/if}
-								<button type="button" class="cancel" onclick={() => (editingScoreId = null)}>Cancel</button>
+							{#if savedNoteId === l.id}<span class="saved" role="status">Saved</span>{/if}
+						</form>
+
+						{#if confirmDeleteId === l.id}
+							<form method="POST" action="?/delete" use:enhance class="confirm-delete">
+								<input type="hidden" name="id" value={l.id} />
+								<span>Delete?</span>
+								<button type="submit" class="danger">Delete</button>
+								<button type="button" class="cancel" onclick={() => (confirmDeleteId = null)}>Cancel</button>
+							</form>
+						{:else}
+							<div class="icon-buttons">
+								<button
+									type="button"
+									class="icon-btn"
+									title="Edit listing"
+									aria-label="Edit listing"
+									onclick={() => (editingId = l.id)}
+								>
+									<Pencil size={16} />
+								</button>
+								<button
+									type="button"
+									class="icon-btn danger"
+									title="Delete listing"
+									aria-label="Delete listing"
+									onclick={() => (confirmDeleteId = l.id)}
+								>
+									<Trash2 size={16} />
+								</button>
 							</div>
-						</form>
-					{:else}
-						<button
-							type="button"
-							class="score tier-{tier(l)}"
-							class:manual={isManual(l)}
-							title={isManual(l) ? `Your score (computed: ${l.score}). Click to change` : 'Match score. Click to set your own'}
-							onclick={() => (editingScoreId = l.id)}
-						>
-							<span class="score-value">{scoreOf(l)}</span>
-							<span class="score-label">{isManual(l) ? 'yours' : 'score'}</span>
-						</button>
-					{/if}
-				</div>
-
-				{#if l.summary}<p class="summary">{l.summary}</p>{/if}
-
-				<ul class="tags">
-					{#each l.score_notes as note}
-						{@const tag = noteToTag(note)}
-						{@const Icon = tag.isPlace ? MapPin : TAG_ICONS[tag.kind]}
-						<li class="tag {tag.kind}"><Icon size={13} />{tag.label}</li>
-					{/each}
-				</ul>
-
-				<div class="card-actions">
-					<form method="POST" action="?/status" use:enhance class="status">
-						<input type="hidden" name="id" value={l.id} />
-						<!-- Saves as soon as you pick a status -->
-						<select
-							name="status"
-							aria-label="Status"
-							data-status={l.status}
-							onchange={(e) => e.currentTarget.form.requestSubmit()}
-						>
-							{#each data.statuses as s}
-								<option value={s} selected={l.status === s}>{s[0].toUpperCase() + s.slice(1)}</option>
-							{/each}
-						</select>
-					</form>
-
-					<form method="POST" action="?/note" use:enhance class="note">
-						<input type="hidden" name="id" value={l.id} />
-						<input name="notes" aria-label="Notes" placeholder="Notes (asked about garage, viewing Tue…)" value={l.notes ?? ''} />
-						<button>Save</button>
-					</form>
-
-					{#if confirmDeleteId === l.id}
-						<form method="POST" action="?/delete" use:enhance class="confirm-delete">
-							<input type="hidden" name="id" value={l.id} />
-							<span>Delete?</span>
-							<button type="submit" class="danger">Delete</button>
-							<button type="button" class="cancel" onclick={() => (confirmDeleteId = null)}>Cancel</button>
-						</form>
-					{:else}
-						<div class="icon-buttons">
-							<button
-								type="button"
-								class="icon-btn"
-								title="Edit title and price"
-								aria-label="Edit listing"
-								onclick={() => ((editingId = l.id), (editError = null))}
-							>
-								<Pencil size={16} />
-							</button>
-							<button
-								type="button"
-								class="icon-btn danger"
-								title="Delete listing"
-								aria-label="Delete listing"
-								onclick={() => (confirmDeleteId = l.id)}
-							>
-								<Trash2 size={16} />
-							</button>
-						</div>
-					{/if}
-				</div>
+						{/if}
+					</div>
+				{/if}
 			</article>
 		{/each}
 	</section>

@@ -174,6 +174,16 @@ describe('adding a listing by hand', () => {
 		expect(after.url).toBe('https://www.realtor.ca/real-estate/1/x'); // new info still fills the gaps
 	});
 
+	it('saves and locks a summary you write', async () => {
+		const { addManualListing } = await import('../src/lib/server/ingest.js');
+		const sb = fakeSupabase();
+		const { id } = await addManualListing(env, sb, { address: '5 Elm St', price: 3000, summary: 'Corner lot, big yard, landlord lives upstairs' }, null);
+		await upsertListing(env, sb, normalizeListing({ address: '5 Elm Street', price: 3000, bedrooms_raw: '3', summary: 'Spacious home' }, 'kijiji'));
+		const row = sb.tables.listings.find((r) => r.id === id);
+		expect(row.summary).toBe('Corner lot, big yard, landlord lives upstairs');
+		expect(row.locked_fields).toContain('summary');
+	});
+
 	it('updates the existing listing when the address is already in the list', async () => {
 		const { addManualListing } = await import('../src/lib/server/ingest.js');
 		const sb = fakeSupabase();
