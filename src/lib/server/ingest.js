@@ -106,10 +106,31 @@ export async function backfillLocations(env, supabase, limit = 20) {
 	return located;
 }
 
+/**
+ * Re-apply the current scoring rules to every listing, so changes to criteria or weights in
+ * config.js also reach listings that arrived earlier. Only rows whose result changed are written.
+ */
+export async function rescoreAll(supabase) {
+	const { data: rows } = await supabase.from('listings').select('*').neq('status', 'gone').limit(1000);
+	let changed = 0;
+	for (const row of rows || []) {
+		const { passes, score, notes } = scoreListing(row);
+		const same =
+			row.passes_filters === passes && row.score === score && JSON.stringify(row.score_notes) === JSON.stringify(notes);
+		if (same) continue;
+		const { error } = await supabase
+			.from('listings')
+			.update({ passes_filters: passes, score, score_notes: notes })
+			.eq('id', row.id);
+		if (!error) changed++;
+	}
+	return changed;
+}
+
 export async function runIngest(env, { dashboardUrl } = {}) {
 	const supabase = db(env);
 	const max = Number(env.MAX_EMAILS_PER_RUN || 15);
-	const summary = { emailsFound: 0, emailsProcessed: 0, listingsSeen: 0, newListings: 0, located: 0, notified: 0, errors: [] };
+	const summary = { emailsFound: 0, emailsProcessed: 0, listingsSeen: 0, newListings: 0, located: 0, rescored: 0, notified: 0, errors: [] };
 
 	const mailbox = await openMailbox(env);
 	try {
@@ -156,6 +177,7 @@ export async function runIngest(env, { dashboardUrl } = {}) {
 	}
 
 	summary.located = await backfillLocations(env, supabase);
+	summary.rescored = await rescoreAll(supabase);
 
 	const { data: matches } = await supabase
 		.from('listings')

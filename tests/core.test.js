@@ -223,3 +223,32 @@ describe('square footage', () => {
 		expect(formatSqft(null, null)).toBe(null);
 	});
 });
+
+describe('scoring guards against bad prices and non-homes', () => {
+	const base = { price: 3500, bedrooms: 3, bedrooms_raw: '3', in_area: true, has_backyard: null, parking_spaces: null, has_garage: null, has_storage: null };
+
+	it('caps the under-budget bonus', () => {
+		expect(scoreListing({ ...base, price: 2600 }).score).toBe(15); // 9 × $100 under = 27, capped at 15
+		expect(scoreListing({ ...base, price: 3300 }).score).toBe(6);
+	});
+
+	it('rejects anything under the minimum price (usually basements)', () => {
+		const r = scoreListing({ ...base, price: 1900, parking_spaces: 1 });
+		expect(r.passes).toBe(false);
+		expect(r.notes).toContain('✗ $1,900 under $2,500');
+		expect(scoreListing({ ...base, price: 2500 }).passes).toBe(true);
+		expect(scoreListing({ ...base, price: null }).passes).toBe(true); // unknown price still shown, with a ? tag
+	});
+
+	it('rejects commercial space, single rooms and parking spots', () => {
+		expect(scoreListing({ ...base, property_type: 'commercial' }).passes).toBe(false);
+		expect(scoreListing({ ...base, property_type: 'Room' }).passes).toBe(false);
+		expect(scoreListing({ ...base, property_type: 'office space' }).passes).toBe(false);
+	});
+
+	it('matches excluded words as whole words only', () => {
+		expect(scoreListing({ ...base, address: '12 Flowertown Avenue' }).passes).toBe(true);
+		expect(scoreListing({ ...base, property_type: '3 bedroom house' }).passes).toBe(true);
+		expect(scoreListing({ ...base, unit: 'Lower' }).passes).toBe(false);
+	});
+});

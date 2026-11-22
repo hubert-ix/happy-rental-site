@@ -42,6 +42,8 @@ create table if not exists listings (
   in_area          boolean,                -- null = could not geocode
   passes_filters   boolean not null default false,
   score            int not null default 0,
+  score_override   int,                    -- set by hand on the dashboard; wins over score
+  effective_score  int generated always as (coalesce(score_override, score)) stored,
   score_notes      text[] default '{}',
   status           text not null default 'new'
                    check (status in ('new','shortlisted','contacted','viewing','rejected','gone')),

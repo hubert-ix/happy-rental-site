@@ -128,7 +128,7 @@ const RECORD_TOOL = {
 			has_garage: { type: ['boolean', 'null'] },
 			has_backyard: { type: ['boolean', 'null'] },
 			has_storage: { type: ['boolean', 'null'] },
-			property_type: { type: ['string', 'null'], description: 'house, main floor, townhouse, condo, basement...' },
+			property_type: { type: ['string', 'null'], description: 'house, main floor, townhouse, condo, basement, room, commercial, parking...' },
 			summary: { type: ['string', 'null'], description: 'One short sentence in your own words' }
 		},
 		required: ['url', 'address', 'price', 'bedrooms_raw'],
@@ -148,6 +148,12 @@ Rules:
 - Call record_listing once for EVERY distinct listing, in the order they appear. Emails often hold 20 or more; record them all.
 - Ignore ads, "similar homes" upsells, agent bios, and footer links.
 - Only record what the email states. Use null for anything not stated. Never guess.
+- Every field of a listing must come from that listing's own block of text: its link and the
+  lines around it. Pasted search pages (Kijiji especially) put a price, a title, a location and
+  a description close together for each ad. Never take a price, address or bed count from a
+  neighbouring ad. If you can't tell which price belongs to an ad, use null.
+- property_type: use "commercial" for offices, stores or other non-residential space, "room" for
+  a single room in a shared home, "parking" for a parking spot.
 - Booleans: true if stated present, false only if explicitly stated absent ("no parking", "no yard access"), otherwise null.
 - A garage counts as has_garage=true; a shed, locker or "storage" counts as has_storage=true.
 - Exclusive or shared backyard access both count as has_backyard=true.

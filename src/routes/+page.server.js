@@ -10,7 +10,7 @@ export async function load({ url }) {
 	const view = VIEWS.includes(url.searchParams.get('view')) ? url.searchParams.get('view') : 'matches';
 	const supabase = db(env);
 
-	let q = supabase.from('listings').select('*').order('score', { ascending: false }).order('first_seen', { ascending: false }).limit(300);
+	let q = supabase.from('listings').select('*').order('effective_score', { ascending: false }).order('first_seen', { ascending: false }).limit(300);
 	if (view === 'matches') q = q.eq('passes_filters', true).not('status', 'in', '(rejected,gone)');
 	else if (view !== 'all') q = q.eq('status', view);
 
@@ -40,6 +40,19 @@ export const actions = {
 		const status = String(form.get('status'));
 		if (!id || !STATUSES.includes(status)) return fail(400, { message: 'Bad status' });
 		const { error } = await db(env).from('listings').update({ status }).eq('id', id);
+		if (error) return fail(500, { message: error.message });
+		return { ok: true };
+	},
+	score: async ({ request }) => {
+		const form = await request.formData();
+		const id = Number(form.get('id'));
+		const raw = String(form.get('score') ?? '').trim();
+		// Empty (or the reset button) clears the override and goes back to the computed score
+		const score_override = form.get('reset') || raw === '' ? null : Number(raw);
+		if (!id || (score_override !== null && (!Number.isInteger(score_override) || score_override < 0 || score_override > 999))) {
+			return fail(400, { message: 'Score must be a whole number from 0 to 999' });
+		}
+		const { error } = await db(env).from('listings').update({ score_override }).eq('id', id);
 		if (error) return fail(500, { message: error.message });
 		return { ok: true };
 	},

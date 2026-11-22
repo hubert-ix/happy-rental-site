@@ -1,11 +1,13 @@
 // Dry run: shows what the extractor sees and returns for matching emails. Writes nothing.
-// Usage:  node --env-file=.env scripts/debug-email.js "label:rental-alerts newer_than:1d" [maxEmails]
+// Usage:  node --env-file=.env scripts/debug-email.js "label:rental-alerts newer_than:1d" [maxEmails] [full]
+//         add "full" to print the whole text sent to Claude instead of the first 800 characters
 
 import { openMailbox } from '../src/lib/server/gmail.js';
 import { extractListings, htmlToText, dedupeKey, extractListingLinks, chunkByListings } from '../src/lib/server/extract.js';
 
 const query = process.argv[2] || 'label:rental-alerts newer_than:1d';
 const max = Number(process.argv[3] || 5);
+const full = process.argv[4] === 'full';
 
 const mailbox = await openMailbox(process.env);
 try {
@@ -20,7 +22,7 @@ try {
 		console.log(`subject: ${email.subject || '(none)'}`);
 		console.log(`html: ${email.html.length} chars · text sent to Claude: ${text.length} chars (limit 60,000)`);
 		console.log(`listing links found: ${extractListingLinks(text).length} · Claude calls (chunks): ${chunkByListings(text).length}`);
-		console.log(`--- start of text ---\n${text.slice(0, 800)}\n--- end of excerpt ---`);
+		console.log(`--- start of text ---\n${full ? text : text.slice(0, 800)}\n--- end of excerpt ---`);
 
 		const { source, listings } = await extractListings(process.env, email);
 		const keys = listings.map(dedupeKey);

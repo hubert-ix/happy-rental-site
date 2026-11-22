@@ -16,14 +16,18 @@ export function scoreListing(l, c = CRITERIA, w = WEIGHTS) {
 
 	// --- hard filters ---
 	const unitText = [l.unit, l.property_type, l.address].filter(Boolean).join(' ').toLowerCase();
-	const excluded = c.excludeUnitKeywords.find((k) => unitText.includes(k));
+	// Whole words only: "lower" must not match "Flowertown Ave"
+	const excluded = c.excludeUnitKeywords.find((k) => new RegExp(`\\b${k}\\b`, 'i').test(unitText));
+	const type = String(l.property_type ?? '').trim().toLowerCase();
 	if (excluded) fail(`${excluded} unit`);
+	else if (['room', 'commercial', 'parking'].includes(type)) fail(`${type}, not a home`);
 
 	if (l.bedrooms === null || l.bedrooms === undefined) notes.push('? bedrooms');
 	else if (l.bedrooms < c.minBedrooms) fail(`${l.bedrooms_raw ?? l.bedrooms} bed`);
 
 	if (l.price === null || l.price === undefined) notes.push('? price');
 	else if (l.price > c.maxPrice) fail(`$${l.price.toLocaleString('en-CA')} over budget`);
+	else if (l.price < c.minPrice) fail(`$${l.price.toLocaleString('en-CA')} under $${c.minPrice.toLocaleString('en-CA')}`);
 
 	if (l.in_area === false) fail('outside area');
 	else if (l.in_area === null || l.in_area === undefined) notes.push('? location (not geocoded)');
@@ -59,8 +63,8 @@ export function scoreListing(l, c = CRITERIA, w = WEIGHTS) {
 		notes.push('✗ no garage/storage');
 	} else notes.push('? garage/storage');
 
-	if (typeof l.price === 'number' && l.price <= c.maxPrice) {
-		score += Math.floor((c.maxPrice - l.price) / 100) * w.underBudgetPer100;
+	if (typeof l.price === 'number' && l.price >= c.minPrice && l.price <= c.maxPrice) {
+		score += Math.min(Math.floor((c.maxPrice - l.price) / 100) * w.underBudgetPer100, w.underBudgetMax);
 	}
 
 	return { passes, score: Math.max(score, 0), notes };

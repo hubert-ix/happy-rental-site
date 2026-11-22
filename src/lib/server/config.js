@@ -4,8 +4,13 @@ export const CRITERIA = {
 	minBedrooms: 3,
 	maxPrice: 3500,
 	minParking: 2,
+	// Anything cheaper is almost always a basement, a single room, or a misread price
+	minPrice: 2500,
 	// Units whose address/type mention these words are rejected outright
-	excludeUnitKeywords: ['basement', 'lower', 'bsmt', 'room for rent', 'shared'],
+	excludeUnitKeywords: [
+		'basement', 'lower', 'bsmt', 'room for rent', 'shared',
+		'commercial', 'office', 'retail', 'storefront', 'warehouse', 'parking space'
+	],
 	// Score at or above this (and passing hard filters) triggers a notification
 	notifyMinScore: 50
 };
@@ -15,7 +20,8 @@ export const WEIGHTS = {
 	backyard: 30,
 	parking: 30, // full points at minParking, half at 1 space
 	garageOrStorage: 25,
-	underBudgetPer100: 3, // small bonus for every $100 under maxPrice
+	underBudgetPer100: 3, // small bonus for every $100 under maxPrice…
+	underBudgetMax: 15, // …capped, so cheapness alone can't push a listing to the top
 	explicitNoPenalty: -20 // listing explicitly says the feature is missing
 };
 
