@@ -1,6 +1,6 @@
 import { db } from './supabase.js';
 import { openMailbox } from './gmail.js';
-import { extractListings, dedupeKey, normalizeAddress } from './extract.js';
+import { extractListings, dedupeKey, normalizeAddress, normalizeListing, parseBedrooms } from './extract.js';
 import { geocode, pointInPolygon } from './geo.js';
 import { scoreListing } from './score.js';
 import { notifyMatches } from './notify.js';
@@ -9,6 +9,13 @@ import { CRITERIA } from './config.js';
 const pick = (next, prev) => (next === null || next === undefined ? prev ?? null : next);
 // For yes/no features: a "true" from any site wins; otherwise take whichever is known.
 const pickBool = (next, prev) => (next === true || prev === true ? true : pick(next, prev));
+
+// A locked field protects the columns that go with it
+const LOCK_COLUMNS = {
+	address: ['address', 'addr_key'],
+	bedrooms_raw: ['bedrooms_raw', 'bedrooms']
+};
+const lockedColumns = (field) => LOCK_COLUMNS[field] ?? [field];
 
 /** Insert a new listing or merge it into the one we already have (matched by MLS, then address). */
 export async function upsertListing(env, supabase, l) {
@@ -50,6 +57,9 @@ export async function upsertListing(env, supabase, l) {
 		lng: prev.lng ?? null,
 		last_seen: new Date().toISOString()
 	};
+
+	// Restore every locked field (and its related columns) to the value you set
+	for (const field of locked) for (const col of lockedColumns(field)) if (col in merged) merged[col] = prev[col];
 
 	const priceLocked = locked.has('price');
 	const priceDropped = existing && !priceLocked && l.price && prev.price && l.price < prev.price;
@@ -203,31 +213,39 @@ export async function runIngest(env, { dashboardUrl } = {}) {
 	return summary;
 }
 
+// Fields that can be set by hand, from the edit form or the "Add listing" form
+const EDITABLE = ['address', 'unit', 'price', 'bedrooms_raw', 'bathrooms', 'parking_spaces', 'has_backyard', 'has_garage', 'has_storage', 'url'];
+
 /**
- * Apply a correction made on the dashboard. Changed fields are locked so later emails don't
- * overwrite them; a new address is re-geocoded, and the listing is re-scored straight away.
+ * Apply values set on the dashboard. Every field that changes is locked so later emails don't
+ * overwrite it; a new address is re-geocoded, and the listing is re-scored straight away.
+ * `fields` may hold any of EDITABLE; fields left undefined are untouched.
  */
-export async function applyManualEdit(env, supabase, id, { address, price }) {
+export async function applyManualEdit(env, supabase, id, fields) {
 	const { data: row, error: readError } = await supabase.from('listings').select('*').eq('id', id).single();
 	if (readError || !row) throw new Error(readError?.message || `Listing ${id} not found`);
 
 	const changes = {};
 	const locked = new Set(row.locked_fields || []);
 
-	if (address !== undefined && address !== row.address) {
-		changes.address = address;
-		changes.addr_key = address ? normalizeAddress(address, row.unit) : row.addr_key;
+	for (const field of EDITABLE) {
+		const value = fields[field];
+		if (value === undefined || value === row[field]) continue;
+		changes[field] = value;
+		locked.add(field);
+	}
+
+	if ('address' in changes) {
+		const address = changes.address;
+		changes.addr_key = address ? normalizeAddress(address, changes.unit ?? row.unit) : row.addr_key;
 		const hit = address ? await geocode(env, supabase, address) : null;
 		changes.lat = hit?.lat ?? null;
 		changes.lng = hit?.lng ?? null;
 		changes.in_area = hit ? pointInPolygon(hit.lng, hit.lat) : null;
-		locked.add('address');
 	}
-	if (price !== undefined && price !== row.price) {
-		changes.price = price;
-		changes.previous_price = null; // a correction isn't a price change
-		locked.add('price');
-	}
+	if ('price' in changes) changes.previous_price = null; // a correction isn't a price change
+	if ('bedrooms_raw' in changes) changes.bedrooms = parseBedrooms(changes.bedrooms_raw);
+	if ('url' in changes && changes.url) changes.urls = [...new Set([...(row.urls || []), changes.url])];
 	if (!Object.keys(changes).length) return row;
 
 	const { passes, score, notes } = scoreListing({ ...row, ...changes });
@@ -236,4 +254,25 @@ export async function applyManualEdit(env, supabase, id, { address, price }) {
 	const { error } = await supabase.from('listings').update(changes).eq('id', id);
 	if (error) throw new Error(error.message);
 	return { ...row, ...changes };
+}
+
+/**
+ * Add a listing typed in on the dashboard. It goes through the same path as email imports
+ * (duplicate check, geocoding, scoring), then everything you entered is applied and locked.
+ * Returns { id, isNew }: isNew is false when it matched a listing already in the list.
+ */
+export async function addManualListing(env, supabase, fields, notes) {
+	if (!fields.address) throw new Error('An address or title is required');
+	const listing = normalizeListing({ ...fields, summary: null }, 'manual');
+	const { id, isNew } = await upsertListing(env, supabase, listing);
+
+	const entered = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== null && v !== undefined && v !== ''));
+	await applyManualEdit(env, supabase, id, entered);
+	// applyManualEdit skips values that already match: lock them too, since you entered them
+	const { data: row } = await supabase.from('listings').select('*').eq('id', id).single();
+	const locked = [...new Set([...(row?.locked_fields || []), ...Object.keys(entered)])];
+	const extra = { locked_fields: locked };
+	if (notes) extra.notes = notes;
+	await supabase.from('listings').update(extra).eq('id', id);
+	return { id, isNew };
 }

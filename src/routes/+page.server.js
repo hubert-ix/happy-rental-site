@@ -2,7 +2,7 @@ import { fail } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/supabase.js';
 import { AREA_GEOJSON, CRITERIA } from '$lib/server/config.js';
-import { applyManualEdit } from '$lib/server/ingest.js';
+import { applyManualEdit, addManualListing } from '$lib/server/ingest.js';
 
 const STATUSES = ['new', 'shortlisted', 'contacted', 'viewing', 'rejected', 'gone'];
 const VIEWS = ['matches', 'all', ...STATUSES];
@@ -75,6 +75,41 @@ export const actions = {
 			return fail(500, { message: err.message });
 		}
 		return { ok: true };
+	},
+	add: async ({ request }) => {
+		const form = await request.formData();
+		const text = (name) => String(form.get(name) ?? '').trim() || null;
+		const number = (name) => {
+			const raw = text(name)?.replace(/[$,\s]/g, '');
+			return raw ? Number(raw) : null;
+		};
+		const yesNo = (name) => ({ yes: true, no: false })[text(name)] ?? null;
+
+		const fields = {
+			address: text('address'),
+			unit: text('unit'),
+			price: number('price'),
+			bedrooms_raw: text('bedrooms'),
+			bathrooms: number('bathrooms'),
+			parking_spaces: number('parking_spaces'),
+			has_backyard: yesNo('has_backyard'),
+			has_garage: yesNo('has_garage'),
+			has_storage: yesNo('has_storage'),
+			url: text('url')
+		};
+
+		if (!fields.address) return fail(400, { message: 'Enter an address or a title' });
+		for (const [name, value] of Object.entries({ price: fields.price, bathrooms: fields.bathrooms, parking: fields.parking_spaces })) {
+			if (value !== null && (!Number.isFinite(value) || value < 0)) return fail(400, { message: `Check the ${name}` });
+		}
+		if (fields.url && !/^https?:\/\//i.test(fields.url)) return fail(400, { message: 'The link must start with http:// or https://' });
+
+		try {
+			const { id, isNew } = await addManualListing(env, db(env), fields, text('notes'));
+			return { added: true, id, isNew };
+		} catch (err) {
+			return fail(500, { message: err.message });
+		}
 	},
 	delete: async ({ request }) => {
 		const form = await request.formData();

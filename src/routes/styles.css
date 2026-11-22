@@ -703,3 +703,83 @@ body {
   background: var(--lavender);
   color: var(--ink);
 }
+
+/* ---------- adding a listing ---------- */
+
+.dashboard .toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dashboard .add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 7px 16px 7px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--dark);
+  color: #fff;
+  cursor: pointer;
+}
+
+.dashboard .add-btn:hover {
+  background: var(--dark-hover);
+}
+
+.dashboard .add-form h2 {
+  margin-bottom: 16px;
+}
+
+.dashboard .add-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.dashboard .add-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.dashboard .add-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.dashboard .add-grid input,
+.dashboard .add-grid select {
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--lavender-soft);
+  color: var(--ink);
+}
+
+.dashboard .add-grid input:focus,
+.dashboard .add-grid select:focus {
+  outline: none;
+  border-color: var(--ink);
+  background: #fff;
+}
+
+.dashboard .add-message {
+  margin: 0 0 18px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: var(--lemon);
+  font-size: 14px;
+}

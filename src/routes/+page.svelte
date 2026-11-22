@@ -1,7 +1,8 @@
 <script>
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import { enhance } from '$app/forms';
-	import { Bed, Bath, Ruler, ExternalLink, MapPin, Check, X, Minus, CircleQuestionMark, Pencil, Trash2 } from '@lucide/svelte';
+	import { goto } from '$app/navigation';
+	import { Bed, Bath, Ruler, ExternalLink, MapPin, Check, X, Minus, CircleQuestionMark, Pencil, Trash2, Plus } from '@lucide/svelte';
 	import { formatSqft } from '$lib/format.js';
 	import { noteToTag, scoreTier } from '$lib/tags.js';
 	import 'leaflet/dist/leaflet.css';
@@ -38,8 +39,31 @@
 			editingScoreId = null;
 			editingId = null;
 			confirmDeleteId = null;
+			adding = false;
 		}
 	}
+
+	// "Add listing" form
+	let adding = $state(false);
+	let addError = $state(null);
+	let addMessage = $state(null);
+
+	const afterAdd = () => async ({ result, update }) => {
+		if (result.type === 'failure') {
+			addError = result.data?.message ?? 'Could not add the listing';
+			return;
+		}
+		await update(); // refresh the list
+		addError = null;
+		adding = false;
+		const { id, isNew } = result.data ?? {};
+		addMessage = isNew ? null : 'That listing was already in your list, so it was updated with what you entered.';
+		if (!id) return;
+		// Show the new card; it may be filtered out of the current view (e.g. Matches)
+		if (!document.getElementById(`l${id}`)) await goto('?view=all', { noScroll: true });
+		await tick();
+		selectListing(id);
+	};
 
 	// Listing waiting for its delete to be confirmed
 	let confirmDeleteId = $state(null);
@@ -86,6 +110,7 @@
 	};
 	// A listing that fails a hard filter never gets a green badge, whatever its feature score
 	// (a score you set yourself is always shown as you set it)
+	const sourcesLabel = (l) => l.sources.map((s) => (s === 'manual' ? 'added by you' : s)).join(', ');
 	const tier = (l) =>
 		isManual(l) || l.passes_filters ? scoreTier(scoreOf(l), data.criteria.notifyMinScore) : 'low';
 	const esc = (s = '') => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -187,14 +212,76 @@
 			<strong>{data.matchCount} active match{data.matchCount === 1 ? '' : 'es'}</strong>
 			· {money(data.criteria.minPrice)}–{money(data.criteria.maxPrice)} · {data.criteria.minBedrooms}+ bed · last email processed {ago(data.lastRun)}
 		</p>
-		<nav class="tabs" aria-label="Filter listings">
-			{#each data.views as v}
-				<a href="?view={v}" class:active={v === data.view} aria-current={v === data.view ? 'page' : undefined}>{v}</a>
-			{/each}
-		</nav>
+		<div class="toolbar">
+			<nav class="tabs" aria-label="Filter listings">
+				{#each data.views as v}
+					<a href="?view={v}" class:active={v === data.view} aria-current={v === data.view ? 'page' : undefined}>{v}</a>
+				{/each}
+			</nav>
+			<button type="button" class="add-btn" onclick={() => ((adding = !adding), (addError = null), (addMessage = null))}>
+				<Plus size={16} />Add listing
+			</button>
+		</div>
 	</header>
 
 	<div class="map" bind:this={mapEl}></div>
+
+	{#if addMessage}<p class="add-message" role="status">{addMessage}</p>{/if}
+
+	{#if adding}
+		<form method="POST" action="?/add" use:enhance={afterAdd} class="card add-form">
+			<h2>Add a listing</h2>
+			<div class="add-grid">
+				<label class="wide">
+					<span>Address or title *</span>
+					<input name="address" required maxlength="200" placeholder="79 McKee Avenue" use:focusAndSelect />
+				</label>
+				<label>
+					<span>Price / month</span>
+					<input name="price" type="number" min="0" step="1" placeholder="3300" />
+				</label>
+				<label>
+					<span>Unit</span>
+					<input name="unit" maxlength="40" placeholder="Main floor" />
+				</label>
+				<label>
+					<span>Bedrooms</span>
+					<input name="bedrooms" maxlength="10" placeholder="3 or 3+1" />
+				</label>
+				<label>
+					<span>Bathrooms</span>
+					<input name="bathrooms" type="number" min="0" step="0.5" placeholder="1" />
+				</label>
+				<label>
+					<span>Parking spaces</span>
+					<input name="parking_spaces" type="number" min="0" step="1" placeholder="2" />
+				</label>
+				{#each [['has_backyard', 'Backyard'], ['has_garage', 'Garage'], ['has_storage', 'Storage']] as [name, label]}
+					<label>
+						<span>{label}</span>
+						<select name={name}>
+							<option value="">Don't know</option>
+							<option value="yes">Yes</option>
+							<option value="no">No</option>
+						</select>
+					</label>
+				{/each}
+				<label class="wide">
+					<span>Link</span>
+					<input name="url" type="url" maxlength="500" placeholder="https://…" />
+				</label>
+				<label class="wide">
+					<span>Notes</span>
+					<input name="notes" maxlength="2000" placeholder="Saw it on Facebook, landlord is Maria…" />
+				</label>
+			</div>
+			<div class="listing-edit-actions">
+				<button type="submit">Add listing</button>
+				<button type="button" class="cancel" onclick={() => ((adding = false), (addError = null))}>Cancel</button>
+				{#if addError}<span class="edit-error" role="alert">{addError}</span>{/if}
+			</div>
+		</form>
+	{/if}
 
 	{#if !data.listings.length}
 		<div class="empty">
@@ -235,7 +322,7 @@
 									{l.address ?? 'Listing'}
 								{/if}
 								{#if l.unit}<span class="unit">{l.unit}</span>{/if}
-								{#if isLocked(l, 'address') || isLocked(l, 'price')}
+								{#if (l.locked_fields || []).length && l.sources.some((s) => s !== 'manual')}
 									<span class="edited" title="You edited this listing; new emails won't overwrite your changes">edited</span>
 								{/if}
 							</h2>
@@ -252,9 +339,9 @@
 								{#if sqft}<span class="fact"><Ruler size={16} />{sqft}</span>{/if}
 								<span class="fact subtle">
 									{#if l.url}
-										<a href={l.url} target="_blank" rel="noopener"><ExternalLink size={14} />{l.sources.join(', ')}</a>
+										<a href={l.url} target="_blank" rel="noopener"><ExternalLink size={14} />{sourcesLabel(l)}</a>
 									{:else}
-										{l.sources.join(', ')}
+										{sourcesLabel(l)}
 									{/if}
 									· {ago(l.first_seen)}
 								</span>

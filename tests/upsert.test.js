@@ -145,3 +145,42 @@ describe('deleted listings', () => {
 		expect(sb.tables.listings[0].status).toBe('deleted');
 	});
 });
+
+describe('adding a listing by hand', () => {
+	const env = { NOMINATIM_EMAIL: 'test@example.com' };
+
+	it('creates, geocodes, scores and locks everything entered', async () => {
+		const { addManualListing } = await import('../src/lib/server/ingest.js');
+		const sb = fakeSupabase();
+		const { id, isNew } = await addManualListing(
+			env,
+			sb,
+			{ address: '79 McKee Avenue', unit: 'Main', price: 3300, bedrooms_raw: '3+1', bathrooms: 1, parking_spaces: 2, has_backyard: false, has_garage: true, has_storage: null, url: null },
+			'Saw it on Facebook'
+		);
+		expect(isNew).toBe(true);
+		const row = sb.tables.listings.find((r) => r.id === id);
+		expect(row).toMatchObject({ address: '79 McKee Avenue', price: 3300, bedrooms: 3, has_backyard: false, notes: 'Saw it on Facebook', in_area: true, passes_filters: true });
+		expect(row.sources).toEqual(['manual']);
+		expect(row.locked_fields.sort()).toEqual(['address', 'bathrooms', 'bedrooms_raw', 'has_backyard', 'has_garage', 'parking_spaces', 'price', 'unit']);
+
+		// A later email claiming a backyard and a different price can't override what you entered
+		const email = normalizeListing({ address: '79 McKee Ave', unit: 'Main', price: 3600, bedrooms_raw: '2', has_backyard: true, url: 'https://www.realtor.ca/real-estate/1/x' }, 'realtor.ca');
+		await upsertListing(env, sb, email);
+		const after = sb.tables.listings.find((r) => r.id === id);
+		expect(sb.tables.listings).toHaveLength(1);
+		expect(after).toMatchObject({ price: 3300, bedrooms: 3, bedrooms_raw: '3+1', has_backyard: false });
+		expect(after.sources).toEqual(['manual', 'realtor.ca']);
+		expect(after.url).toBe('https://www.realtor.ca/real-estate/1/x'); // new info still fills the gaps
+	});
+
+	it('updates the existing listing when the address is already in the list', async () => {
+		const { addManualListing } = await import('../src/lib/server/ingest.js');
+		const sb = fakeSupabase();
+		await upsertListing(env, sb, normalizeListing({ address: '80 Alamosa Drive', unit: 'Upper', price: 3000, bedrooms_raw: '3' }, 'realtor.ca'));
+		const { isNew } = await addManualListing(env, sb, { address: '80 Alamosa Dr', unit: 'Upper', price: 2950, parking_spaces: 2 }, null);
+		expect(isNew).toBe(false);
+		expect(sb.tables.listings).toHaveLength(1);
+		expect(sb.tables.listings[0]).toMatchObject({ price: 2950, parking_spaces: 2 });
+	});
+});
