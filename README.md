@@ -1,4 +1,4 @@
-# Rental Radar
+# Happy Rental
 
 Collects rental listings from the saved-search **alert emails** that realtor.ca, rentals.ca, Zolo, Kijiji and others send you. It pulls out the details, de-duplicates across sites, checks each listing against your area and must-haves, and pings you when a match appears.
 
@@ -36,7 +36,7 @@ A value the email doesn't mention never fails a listing. It shows as a grey `? p
 ### 1. Supabase
 1. Create a project (region **ca-central-1** if you want it close by).
 2. In the SQL editor, run `supabase/schema.sql`.
-3. Copy the project URL and **service role** key into `.env`.
+3. Under **Settings → API Keys**, create a secret key (`sb_secret_...`) and put it in `.env` as `SUPABASE_SECRET_KEY`, along with the project URL. You don't need the publishable key: the dashboard loads its data on the server, so the browser never talks to Supabase.
 
 ### 2. A Gmail inbox for alerts
 Use a dedicated Gmail account (e.g. `hubert.rentals@gmail.com`). It keeps the noise out of your main inbox, and the app only ever sees that account.
@@ -46,7 +46,7 @@ Create a Gmail filter: *from:(realtor.ca OR rentals.ca OR zolo.ca OR kijiji.ca O
 ### 3. Gmail access (app password)
 No Google Cloud project needed. The app reads mail over IMAP and sends the digest over SMTP.
 1. Sign in to the alerts account and turn on **2-Step Verification** (myaccount.google.com → Security). App passwords only appear once it's on.
-2. Go to [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), create one named `Rental Radar`, and copy the 16 characters.
+2. Go to [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), create one named `Happy Rental`, and copy the 16 characters.
 3. In `.env`, set `GMAIL_USER` to the alerts address and `GMAIL_APP_PASSWORD` to the app password.
 4. IMAP is on by default for Gmail. If the first run fails to log in, check Gmail → Settings → *Forwarding and POP/IMAP* → **Enable IMAP**.
 

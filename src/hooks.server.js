@@ -11,7 +11,7 @@ export async function handle({ event, resolve }) {
 	if (!env.DASHBOARD_PASSWORD || password !== env.DASHBOARD_PASSWORD) {
 		return new Response('Authentication required', {
 			status: 401,
-			headers: { 'WWW-Authenticate': 'Basic realm="Rental Radar"' }
+			headers: { 'WWW-Authenticate': 'Basic realm="Happy Rental"' }
 		});
 	}
 	return resolve(event);

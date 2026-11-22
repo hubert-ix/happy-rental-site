@@ -1,5 +1,6 @@
--- Rental Radar schema. Run once in the Supabase SQL editor.
--- All access goes through the server with the service-role key, so RLS is on with no policies.
+-- Happy Rental schema. Run once in the Supabase SQL editor.
+-- All access goes through the server with the secret key (sb_secret_...), which bypasses RLS,
+-- so RLS is on with no policies: the publishable key can't read or write anything here.
 
 create table if not exists alert_emails (
   gmail_id      text primary key,
@@ -27,6 +28,9 @@ create table if not exists listings (
   bedrooms         numeric,                -- "3+1" is stored as 3 (above-grade)
   bedrooms_raw     text,
   bathrooms        numeric,
+  sqft_raw         text,                   -- as written, e.g. "1100-1500"
+  sqft_min         int,
+  sqft_max         int,                    -- null for open-ended "2000+"
   parking_spaces   int,
   has_garage       boolean,                -- null = unknown
   has_backyard     boolean,

@@ -51,7 +51,7 @@ describe('upsertListing', () => {
 		const env = { NOMINATIM_EMAIL: 'test@example.com' };
 
 		const kijiji = normalizeListing(
-			{ url: 'https://www.kijiji.ca/v-apartments/x/123', address: '79 McKee Ave', unit: 'Front', price: 3600, bedrooms_raw: '3', has_backyard: true },
+			{ url: 'https://www.kijiji.ca/v-apartments/x/123', address: '79 McKee Ave', unit: 'Front', price: 3600, bedrooms_raw: '3', has_backyard: true, sqft_raw: '1100-1500' },
 			'kijiji'
 		);
 		const first = await upsertListing(env, sb, kijiji);
@@ -81,6 +81,7 @@ describe('upsertListing', () => {
 		expect(row.price).toBe(3500);
 		expect(row.previous_price).toBe(3600);
 		expect(row.has_backyard).toBe(true); // kept from Kijiji even though realtor.ca didn't say
+		expect([row.sqft_min, row.sqft_max]).toEqual([1100, 1500]); // kept: realtor.ca didn't state a size
 		expect(row.in_area).toBe(true);
 		expect(row.passes_filters).toBe(true);
 		expect(row.score).toBe(85);

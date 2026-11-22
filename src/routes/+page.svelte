@@ -30,7 +30,11 @@
 				color: l.passes_filters ? '#0a7d3b' : '#999',
 				fillOpacity: l.passes_filters ? 0.8 : 0.3
 			})
-				.bindPopup(`<b>${l.address ?? ''}</b><br>${money(l.price)} · ${l.bedrooms_raw ?? l.bedrooms ?? '?'} bed · score ${l.score}<br><a href="#l${l.id}">details</a>`)
+				.bindPopup(
+					`<b>${l.address ?? ''}</b><br>${money(l.price)} · ${l.bedrooms_raw ?? l.bedrooms ?? '?'} bed` +
+						(formatSqft(l.sqft_min, l.sqft_max) ? ` · ${formatSqft(l.sqft_min, l.sqft_max)}` : '') +
+						` · score ${l.score}<br><a href="#l${l.id}">details</a>`
+				)
 				.addTo(markerLayer);
 		}
 	}

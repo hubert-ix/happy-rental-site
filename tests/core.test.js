@@ -11,9 +11,11 @@ import {
 	dedupeKey,
 	normalizeAddress,
 	detectSource,
-	findMls
+	findMls,
+	parseSqft
 } from '../src/lib/server/extract.js';
 import { parseRawEmail } from '../src/lib/server/gmail.js';
+import { formatSqft } from '../src/lib/format.js';
 
 describe('search area polygon', () => {
 	const inside = {
@@ -191,5 +193,33 @@ describe('normalising and de-duplication', () => {
 		expect(dedupeKey({ address: '80 Alamosa Drive', unit: 'Upper' })).toBe('addr:80 alamosa dr#upper');
 		expect(dedupeKey({ url: 'https://www.zolo.ca/toronto-real-estate/1-a/' })).toBe('url:zolo.ca/toronto-real-estate/1-a');
 		expect(dedupeKey({})).toBe(null);
+	});
+});
+
+describe('square footage', () => {
+	it('parses ranges, single values and open-ended sizes', () => {
+		expect(parseSqft('1100-1500 sqft')).toEqual({ min: 1100, max: 1500 });
+		expect(parseSqft('1,400 sq. ft.')).toEqual({ min: 1400, max: 1400 });
+		expect(parseSqft('2000+')).toEqual({ min: 2000, max: null });
+		expect(parseSqft('1500 - 2000')).toEqual({ min: 1500, max: 2000 });
+		expect(parseSqft(1250)).toEqual({ min: 1250, max: 1250 });
+	});
+
+	it('ignores missing, tiny and metric values', () => {
+		expect(parseSqft(null)).toEqual({ min: null, max: null });
+		expect(parseSqft('3 beds')).toEqual({ min: null, max: null });
+		expect(parseSqft('130 m²')).toEqual({ min: null, max: null });
+	});
+
+	it('flows through normalizeListing', () => {
+		const l = normalizeListing({ address: '1 A St', price: 3400, bedrooms_raw: '3', sqft_raw: '1100-1500' }, 'zolo');
+		expect([l.sqft_min, l.sqft_max, l.sqft_raw]).toEqual([1100, 1500, '1100-1500']);
+	});
+
+	it('formats for display', () => {
+		expect(formatSqft(1100, 1500)).toBe('1,100–1,500 sqft');
+		expect(formatSqft(1400, 1400)).toBe('1,400 sqft');
+		expect(formatSqft(2000, null)).toBe('2,000+ sqft');
+		expect(formatSqft(null, null)).toBe(null);
 	});
 });

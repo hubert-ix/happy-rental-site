@@ -84,5 +84,5 @@ export async function sendEmail(env, { to, subject, html }) {
 		secure: true,
 		auth: { user, pass }
 	});
-	return transport.sendMail({ from: `Rental Radar <${user}>`, to, subject, html });
+	return transport.sendMail({ from: `Happy Rental <${user}>`, to, subject, html });
 }
