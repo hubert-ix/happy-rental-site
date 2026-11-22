@@ -1,6 +1,7 @@
 <script>
 	import { onMount } from 'svelte';
 	import { enhance } from '$app/forms';
+	import { formatSqft } from '$lib/format.js';
 	import 'leaflet/dist/leaflet.css';
 
 	let { data } = $props();
@@ -54,7 +55,7 @@
 
 <main>
 	<header>
-		<h1>Rental Radar</h1>
+		<h1>Happy Rental</h1>
 		<p class="meta">
 			{data.matchCount} active matches · ≤ {money(data.criteria.maxPrice)} · {data.criteria.minBedrooms}+ bed · last email processed {ago(data.lastRun)}
 		</p>
@@ -86,6 +87,7 @@
 								<s>{money(l.previous_price)}</s>
 							{/if}
 							· {l.bedrooms_raw ?? l.bedrooms ?? '?'} bed · {l.bathrooms ?? '?'} bath
+							{#if formatSqft(l.sqft_min, l.sqft_max)}· {formatSqft(l.sqft_min, l.sqft_max)}{/if}
 							{#if l.property_type}· {l.property_type}{/if}
 							· seen on {l.sources.join(', ')} · {ago(l.first_seen)}
 						</div>

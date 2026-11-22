@@ -125,6 +125,7 @@ const EXTRACT_TOOL = {
 						price: { type: ['number', 'null'], description: 'Monthly rent in CAD' },
 						bedrooms_raw: { type: ['string', 'null'], description: 'As written, e.g. "3+1"' },
 						bathrooms: { type: ['number', 'null'] },
+						sqft_raw: { type: ['string', 'null'], description: 'Interior size as written, e.g. "1100-1500 sqft", "1,400 sq. ft."' },
 						parking_spaces: { type: ['number', 'null'] },
 						has_garage: { type: ['boolean', 'null'] },
 						has_backyard: { type: ['boolean', 'null'] },
@@ -193,7 +194,23 @@ export function parseBedrooms(raw) {
 	return m ? Number(m[1]) : null;
 }
 
+/**
+ * "1100-1500 sqft" -> { min: 1100, max: 1500 }, "1,400 sq. ft." -> { min: 1400, max: 1400 },
+ * "2000+" -> { min: 2000, max: null }. Values under 200 are ignored, as are metres.
+ */
+export function parseSqft(raw) {
+	if (raw === null || raw === undefined || raw === '') return { min: null, max: null };
+	if (typeof raw === 'number') return raw >= 200 ? { min: raw, max: raw } : { min: null, max: null };
+	const s = String(raw).replace(/,/g, '');
+	if (/\bm(²|2|eters?|etres?)\b|sq\.?\s*m\b/i.test(s)) return { min: null, max: null };
+	const nums = [...s.matchAll(/\d+(?:\.\d+)?/g)].map((m) => Math.round(Number(m[0]))).filter((n) => n >= 200);
+	if (!nums.length) return { min: null, max: null };
+	if (nums.length === 1) return { min: nums[0], max: /\+/.test(s) ? null : nums[0] };
+	return { min: Math.min(nums[0], nums[1]), max: Math.max(nums[0], nums[1]) };
+}
+
 export function normalizeListing(raw, source) {
+	const sqft = parseSqft(raw.sqft_raw);
 	const url = raw.url ? unwrapUrl(raw.url) : null;
 	const mls = (raw.mls && String(raw.mls).toUpperCase().replace(/[^A-Z0-9]/g, '')) || findMls(url || '') || null;
 	return {
@@ -207,6 +224,9 @@ export function normalizeListing(raw, source) {
 		bedrooms_raw: raw.bedrooms_raw ?? null,
 		bedrooms: parseBedrooms(raw.bedrooms_raw),
 		bathrooms: toNumber(raw.bathrooms),
+		sqft_raw: raw.sqft_raw ?? null,
+		sqft_min: sqft.min,
+		sqft_max: sqft.max,
 		parking_spaces: toNumber(raw.parking_spaces),
 		has_garage: typeof raw.has_garage === 'boolean' ? raw.has_garage : null,
 		has_backyard: typeof raw.has_backyard === 'boolean' ? raw.has_backyard : null,

@@ -1,4 +1,5 @@
 import { sendEmail } from './gmail.js';
+import { formatSqft } from '../format.js';
 
 const esc = (s = '') => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
@@ -14,7 +15,7 @@ export function digestHtml(listings, dashboardUrl) {
           </div>
           <div style="margin:4px 0">
             <b>${l.price ? '$' + l.price.toLocaleString('en-CA') : 'price ?'}</b>
-            · ${l.bedrooms_raw ?? l.bedrooms ?? '?'} bed · score ${l.score}
+            · ${l.bedrooms_raw ?? l.bedrooms ?? '?'} bed${formatSqft(l.sqft_min, l.sqft_max) ? ` · ${formatSqft(l.sqft_min, l.sqft_max)}` : ''} · score ${l.score}
           </div>
           <div style="color:#444;font-size:13px">${esc(l.score_notes.join('  '))}</div>
           ${l.summary ? `<div style="color:#666;font-size:13px;margin-top:4px">${esc(l.summary)}</div>` : ''}
