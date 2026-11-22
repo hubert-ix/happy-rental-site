@@ -2,7 +2,7 @@
 	import { onMount, onDestroy, tick } from 'svelte';
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
-	import { Bed, Bath, Ruler, ExternalLink, MapPin, Check, X, Minus, CircleQuestionMark, Pencil, Trash2, Plus } from '@lucide/svelte';
+	import { Bed, Bath, Ruler, ExternalLink, MapPin, Check, X, Minus, CircleQuestionMark, Pencil, Trash2, Plus, MapPinned, Map as MapIcon } from '@lucide/svelte';
 	import { formatSqft } from '$lib/format.js';
 	import ListingForm from '$lib/components/ListingForm.svelte';
 	import { noteToTag, scoreTier } from '$lib/tags.js';
@@ -17,6 +17,8 @@
 	let markerLayer;
 	let L;
 	let resizeObserver;
+	let userMoved = false; // once you pan/zoom (or jump to a listing), the map stops re-framing the area
+	const markersById = new Map(); // listing id -> Leaflet marker, for "Go to map"
 
 	// selectedId: card picked by clicking its map dot (stays until you click elsewhere or press Esc)
 	// hoveredId: card whose map dot the mouse is over right now
@@ -113,10 +115,11 @@
 	function drawMarkers() {
 		if (!map || !L) return;
 		markerLayer.clearLayers();
+		markersById.clear();
 		for (const l of data.listings) {
 			if (l.lat == null) continue;
 			const sqft = formatSqft(l.sqft_min, l.sqft_max);
-			L.circleMarker([l.lat, l.lng], {
+			const marker = L.circleMarker([l.lat, l.lng], {
 				radius: 8,
 				weight: 2,
 				color: '#fff',
@@ -134,7 +137,30 @@
 				.on('mouseout', () => (hoveredId = null))
 				.on('click', () => selectListing(l.id))
 				.addTo(markerLayer);
+			markersById.set(l.id, marker);
 		}
+	}
+
+		// "Go to map": scroll up to the map, centre it on the listing (same zoom) and show its details
+	function showOnMap(l) {
+		const marker = markersById.get(l.id);
+		if (!map || !marker) return;
+		userMoved = true;
+		mapEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+		map.panTo([l.lat, l.lng], { animate: true, duration: 0.6 });
+		marker.openTooltip();
+		hoveredId = l.id;
+		setTimeout(() => hoveredId === l.id && (hoveredId = null), 2500);
+	}
+
+	// "Show on Google Maps": search by address (Toronto added unless it's already there), or by coordinates
+	function googleMapsUrl(l) {
+		const query = l.address
+			? /toronto|north york|ontario/i.test(l.address)
+				? l.address
+				: `${l.address}, Toronto, ON`
+			: `${l.lat},${l.lng}`;
+		return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 	}
 
 	onMount(async () => {
@@ -151,7 +177,6 @@
 		// Leaflet measures its box once, at creation. If the layout shifts afterwards (web fonts
 		// loading, the page settling), tiles only fill part of the map. Re-measure on every size
 		// change, and keep the area framed until the user pans or zooms themselves.
-		let userMoved = false;
 		for (const ev of ['mousedown', 'touchstart', 'wheel']) mapEl.addEventListener(ev, () => (userMoved = true), { once: true, passive: true });
 		resizeObserver = new ResizeObserver(() => {
 			map.invalidateSize();
@@ -252,6 +277,18 @@
 								{:else}
 									{l.address ?? 'Listing'}
 								{/if}
+								<span class="title-icons">
+									{#if l.lat != null && l.lng != null}
+										<button type="button" class="title-icon" title="Show on the map above" aria-label="Show {l.address ?? 'listing'} on the map" onclick={() => showOnMap(l)}>
+											<MapPinned size={17} />
+										</button>
+									{/if}
+									{#if l.address || l.lat != null}
+										<a class="title-icon" href={googleMapsUrl(l)} target="_blank" rel="noopener" title="Open in Google Maps" aria-label="Open {l.address ?? 'listing'} in Google Maps">
+											<MapIcon size={17} />
+										</a>
+									{/if}
+								</span>
 								{#if (l.locked_fields || []).length && l.sources.some((s) => s !== 'manual')}
 									<span class="edited" title="You edited this listing; new emails won't overwrite your changes">edited</span>
 								{/if}
@@ -305,7 +342,6 @@
 							<button
 								type="button"
 								class="score tier-{tier(l)}"
-								class:manual={isManual(l)}
 								title={isManual(l) ? `Your score (computed: ${l.score}). Click to change` : 'Match score. Click to set your own'}
 								onclick={() => (editingScoreId = l.id)}
 							>

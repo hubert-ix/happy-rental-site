@@ -815,3 +815,31 @@ body {
   0%, 70% { opacity: 1; }
   100% { opacity: 0; }
 }
+
+/* ---------- map shortcuts next to the title ---------- */
+
+.dashboard .title-icons {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.dashboard .title-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.dashboard .title-icon:hover {
+  background: var(--lavender);
+  color: var(--ink);
+  text-decoration: none;
+}
