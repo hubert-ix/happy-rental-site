@@ -109,6 +109,8 @@ export function findMls(text = '') {
 const EXTRACT_TOOL = {
 	name: 'record_listings',
 	description: 'Record every distinct rental listing found in the email.',
+	// Grammar-constrained output: the input is guaranteed to match this schema (a real array, never a string)
+	strict: true,
 	input_schema: {
 		type: 'object',
 		properties: {
@@ -133,11 +135,13 @@ const EXTRACT_TOOL = {
 						property_type: { type: ['string', 'null'], description: 'house, main floor, townhouse, condo, basement...' },
 						summary: { type: ['string', 'null'], description: 'One short sentence in your own words' }
 					},
-					required: ['url', 'address', 'price', 'bedrooms_raw']
+					required: ['url', 'address', 'price', 'bedrooms_raw'],
+					additionalProperties: false
 				}
 			}
 		},
-		required: ['listings']
+		required: ['listings'],
+		additionalProperties: false
 	}
 };
 
@@ -157,18 +161,22 @@ Rules:
 export function coerceListings(value) {
 	if (Array.isArray(value)) return value;
 	if (typeof value === 'string') {
+		// Strip ```json fences or stray text around the JSON before parsing
+		const cleaned = value.replace(/^\s*```(?:json)?|```\s*$/g, '').trim();
+		const start = cleaned.search(/[[{]/);
+		const end = Math.max(cleaned.lastIndexOf(']'), cleaned.lastIndexOf('}'));
 		try {
-			return coerceListings(JSON.parse(value));
+			return coerceListings(JSON.parse(start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned));
 		} catch {
-			throw new Error('Claude returned listings as text that is not valid JSON');
+			throw new Error(`Claude returned listings as text that is not valid JSON: ${value.slice(0, 200)}`);
 		}
 	}
 	if (value && typeof value === 'object') return Array.isArray(value.listings) ? value.listings : [value];
 	return [];
 }
 
-export async function extractWithClaude(env, { subject, from, text }) {
-	const res = await fetch('https://api.anthropic.com/v1/messages', {
+function claudeRequest(env, { subject, from, text }, tool) {
+	return fetch('https://api.anthropic.com/v1/messages', {
 		method: 'POST',
 		headers: {
 			'content-type': 'application/json',
@@ -180,8 +188,8 @@ export async function extractWithClaude(env, { subject, from, text }) {
 			// ~150 tokens per listing: room for a full page of pasted search results
 			max_tokens: 16000,
 			system: SYSTEM,
-			tools: [EXTRACT_TOOL],
-			tool_choice: { type: 'tool', name: 'record_listings' },
+			tools: [tool],
+			tool_choice: { type: 'tool', name: tool.name },
 			messages: [
 				{
 					role: 'user',
@@ -190,6 +198,18 @@ export async function extractWithClaude(env, { subject, from, text }) {
 			]
 		})
 	});
+}
+
+export async function extractWithClaude(env, email) {
+	let res = await claudeRequest(env, email, EXTRACT_TOOL);
+	if (res.status === 400) {
+		// If strict mode is ever rejected (model or schema not supported), retry without it once
+		const body = await res.text();
+		if (!/strict|schema/i.test(body)) throw new Error(`Claude extraction failed: 400 ${body}`);
+		console.warn(`Strict tool use rejected, retrying without it: ${body.slice(0, 200)}`);
+		const { strict, ...lenientTool } = EXTRACT_TOOL;
+		res = await claudeRequest(env, email, lenientTool);
+	}
 	if (!res.ok) throw new Error(`Claude extraction failed: ${res.status} ${await res.text()}`);
 	const json = await res.json();
 	if (json.stop_reason === 'max_tokens') {
