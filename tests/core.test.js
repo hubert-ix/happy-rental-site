@@ -25,11 +25,14 @@ describe('search area polygon', () => {
 		'Armour Heights': [-79.425, 43.74],
 		'York Mills & Leslie': [-79.363, 43.757],
 		'Parkwoods (east of the DVP)': [-79.325, 43.76],
-		'Victoria Village': [-79.31, 43.735]
+		'Victoria Village': [-79.31, 43.735],
+		'Woody Vine Way (just south of Finch, by Leslie)': [-79.368905, 43.789317],
+		'Linus Rd at Finch (south side, by Don Mills)': [-79.3555, 43.7919]
 	};
 	const outside = {
 		'Scarborough (current place)': [-79.25, 43.77],
 		'Yonge & Steeles': [-79.42, 43.797],
+		'North of Finch at Leslie (Old Cummer)': [-79.37, 43.7945],
 		'West of Bathurst (Bathurst Manor)': [-79.455, 43.755],
 		'South of Eglinton (Davisville)': [-79.395, 43.698],
 		'East of Victoria Park (Wexford)': [-79.295, 43.75],
