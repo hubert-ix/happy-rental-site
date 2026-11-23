@@ -3,7 +3,7 @@
 //         add "full" to print the whole text sent to Claude instead of the first 800 characters
 
 import { openMailbox } from '../src/lib/server/gmail.js';
-import { extractListings, htmlToText, dedupeKey, extractListingLinks, chunkByListings } from '../src/lib/server/extract.js';
+import { extractListings, htmlToText, dedupeKey, compactLinks, countListingBlocks, chunkByListings } from '../src/lib/server/extract.js';
 
 const query = process.argv[2] || 'label:rental-alerts newer_than:1d';
 const max = Number(process.argv[3] || 5);
@@ -16,12 +16,13 @@ try {
 
 	for (const id of ids) {
 		const email = await mailbox.getMessage(id);
-		const text = htmlToText(email.html) || email.text || '';
+		const raw = htmlToText(email.html) || email.text || '';
+		const { text } = compactLinks(raw); // what Claude actually receives
 		console.log('='.repeat(80));
 		console.log(`id ${id} · ${email.receivedAt} · from ${email.from}`);
 		console.log(`subject: ${email.subject || '(none)'}`);
-		console.log(`html: ${email.html.length} chars · text sent to Claude: ${text.length} chars (limit 60,000)`);
-		console.log(`listing links found: ${extractListingLinks(text).length} · Claude calls (chunks): ${chunkByListings(text).length}`);
+		console.log(`html: ${email.html.length} chars · text: ${raw.length} chars, ${text.length} after shortening links (limit 60,000)`);
+		console.log(`listings expected: ${countListingBlocks(text)} · Claude calls (chunks): ${chunkByListings(text).length}`);
 		console.log(`--- start of text ---\n${full ? text : text.slice(0, 800)}\n--- end of excerpt ---`);
 
 		const { source, listings } = await extractListings(process.env, email);

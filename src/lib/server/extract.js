@@ -22,7 +22,12 @@ export function detectSource(from = '', body = '') {
 	return 'other';
 }
 
-const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'", '#36': '$' };
+const ENTITIES = {
+	amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'", '#36': '$',
+	bull: '•', middot: '·', ndash: '–', mdash: '—', hellip: '…', lsquo: '‘', rsquo: '’',
+	ldquo: '“', rdquo: '”', copy: '©', reg: '®', trade: '™', deg: '°', sup2: '²', times: '×',
+	eacute: 'é', egrave: 'è', agrave: 'à', ccedil: 'ç', zwnj: '', zwj: '', shy: ''
+};
 
 function decodeEntities(s) {
 	return s
@@ -157,7 +162,58 @@ Rules:
 - Booleans: true if stated present, false only if explicitly stated absent ("no parking", "no yard access"), otherwise null.
 - A garage counts as has_garage=true; a shed, locker or "storage" counts as has_storage=true.
 - Exclusive or shared backyard access both count as has_backyard=true.
+- Links are written as short references like [L4]. For url, give the reference on the listing's
+  price or address line, exactly as written (e.g. "L4"). Some emails link a listing's photo,
+  price, beds and address separately: those consecutive lines are still ONE listing.
+- Ranges (buildings with several units): bedrooms_raw as written (e.g. "0-3"); price = the lowest.
 - If the email holds no listings at all, call no_listings.`;
+
+/**
+ * Replace every [https://…] in the text with a short reference like [L4], and return the map
+ * back to the real URLs. Alert emails often wrap each link in a ~600-character click-tracking
+ * URL (rentals.ca links the photo, price, beds and address of every card separately), which
+ * buries the actual listing details. Identical URLs share a reference.
+ */
+export function compactLinks(text) {
+	const links = new Map(); // "L4" -> url
+	const ids = new Map(); // url -> "L4"
+	const compact = text
+		.replace(/\[(https?:\/\/[^\]\s]+)\]/g, (_, url) => {
+			if (!ids.has(url)) {
+				const id = `L${ids.size + 1}`;
+				ids.set(url, id);
+				links.set(id, url);
+			}
+			return `[${ids.get(url)}]`;
+		})
+		// drop the table-cell markers ("|") that email layouts leave behind, and the lines they emptied
+		.split('\n')
+		.map((line) => line.replace(/^(\s*\|\s*)+|(\s*\|\s*)+$/g, '').trim())
+		.filter(Boolean)
+		.join('\n');
+	return { text: compact, links };
+}
+
+/** Turn a reference Claude returned ("L4", "[L4]") back into its URL; real URLs pass through. */
+export function resolveLinkRef(value, links) {
+	if (!value) return null;
+	const m = String(value).trim().match(/^\[?(L\d+)\]?$/i);
+	if (m) return links.get(m[1].toUpperCase()) ?? null;
+	return value;
+}
+
+/**
+ * Roughly how many listings a block of text holds: lines with a price ($) and a link,
+ * either a reference like [L4] or a known listing-site URL. Used to split long emails
+ * and to tell Claude how many listings to expect.
+ */
+export function countListingBlocks(text) {
+	let count = 0;
+	for (const line of text.split('\n')) {
+		if (/\$\s?\d/.test(line) && (/\[L\d+\]/.test(line) || extractListingLinks(line).length)) count++;
+	}
+	return count;
+}
 
 const LISTINGS_PER_CALL = 20;
 
@@ -170,7 +226,7 @@ export function chunkByListings(text, perChunk = LISTINGS_PER_CALL) {
 	let current = [];
 	let count = 0;
 	for (const line of text.split('\n')) {
-		const links = extractListingLinks(line).length;
+		const links = countListingBlocks(line);
 		if (count + links > perChunk && current.length) {
 			chunks.push(current.join('\n'));
 			current = [];
@@ -213,7 +269,7 @@ const MAX_TURNS = 8;
  */
 async function extractChunk(env, { subject, from, text, expected }) {
 	const hint = expected
-		? `This email links to ${expected} individual listing pages, so expect about ${expected} record_listing calls.\n\n`
+		? `This email appears to hold about ${expected} listings, so expect about ${expected} record_listing calls.\n\n`
 		: '';
 	const messages = [{ role: 'user', content: `${hint}From: ${from}\nSubject: ${subject}\n\n${text}` }];
 	const found = [];
@@ -262,7 +318,7 @@ async function extractChunk(env, { subject, from, text, expected }) {
 export async function extractWithClaude(env, { subject, from, text }) {
 	const all = [];
 	for (const chunk of chunkByListings(text.slice(0, 60_000))) {
-		const expected = extractListingLinks(chunk).length;
+		const expected = countListingBlocks(chunk);
 		all.push(...(await extractChunk(env, { subject, from, text: chunk, expected })));
 	}
 	// A continuation turn can repeat a listing it already recorded: keep the first of each
@@ -278,14 +334,17 @@ export async function extractWithClaude(env, { subject, from, text }) {
 function toNumber(v) {
 	if (v === null || v === undefined || v === '') return null;
 	if (typeof v === 'number') return Number.isFinite(v) ? v : null;
-	const n = Number(String(v).replace(/[^0-9.]/g, ''));
-	return Number.isFinite(n) && String(v).match(/\d/) ? n : null;
+	// First number only, so a range like "$2,600 - $3,300" gives 2600 (not 26003300)
+	const m = String(v).replace(/,/g, '').match(/\d+(?:\.\d+)?/);
+	return m ? Number(m[0]) : null;
 }
 
-/** "3+1" -> 3, "3 beds" -> 3, "Studio" -> 0 */
+/** "3+1" -> 3, "3 beds" -> 3, "Studio" -> 0, a range "0-3" or "2 - 4" -> its top end */
 export function parseBedrooms(raw) {
 	if (raw === null || raw === undefined) return null;
 	if (typeof raw === 'number') return raw;
+	const range = String(raw).match(/(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)/);
+	if (range) return Math.max(Number(range[1]), Number(range[2]));
 	if (/studio|bachelor/i.test(raw)) return 0;
 	const m = String(raw).match(/(\d+(?:\.\d+)?)/);
 	return m ? Number(m[1]) : null;
@@ -364,7 +423,11 @@ export async function extractListings(env, email) {
 
 	let raw;
 	if (env.ANTHROPIC_API_KEY) {
-		raw = await extractWithClaude(env, { subject: email.subject, from: email.from, text });
+		const { text: compact, links } = compactLinks(text);
+		raw = (await extractWithClaude(env, { subject: email.subject, from: email.from, text: compact })).map((l) => ({
+			...l,
+			url: resolveLinkRef(l.url, links)
+		}));
 	} else {
 		// Fallback: link-only rows, so you at least see something in the dashboard
 		raw = extractListingLinks(text).map((url) => ({ url, address: null, price: null, bedrooms_raw: null }));
