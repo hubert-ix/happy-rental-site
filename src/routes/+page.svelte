@@ -80,10 +80,10 @@
 	let editingId = $state(null);
 	const isLocked = (l, field) => (l.locked_fields || []).includes(field);
 
-	// Score you set by hand wins over the computed one
+	// Scores are set by hand only; a listing has none until you give it one
 	let editingScoreId = $state(null);
-	const scoreOf = (l) => l.score_override ?? l.score;
-	const isManual = (l) => l.score_override !== null && l.score_override !== undefined;
+	const scoreOf = (l) => l.score_override;
+	const isScored = (l) => l.score_override !== null && l.score_override !== undefined;
 
 	function focusAndSelect(node) {
 		node.focus();
@@ -96,7 +96,7 @@
 		editingScoreId = null;
 	};
 
-	const TIER_COLOURS = { high: '#2f9e74', mid: '#cdb52a', low: '#e0739a' };
+	const TIER_COLOURS = { high: '#2f9e74', mid: '#cdb52a', low: '#e0739a', none: '#8f84b8' };
 	const TAG_ICONS = { good: Check, bad: X, meh: Minus, unknown: CircleQuestionMark };
 
 	const money = (n) => (n ? '$' + Number(n).toLocaleString('en-CA') : '—');
@@ -105,11 +105,8 @@
 		const h = Math.round((Date.now() - new Date(iso).getTime()) / 36e5);
 		return h < 1 ? 'just now' : h < 48 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
 	};
-	// A listing that fails a hard filter never gets a green badge, whatever its feature score
-	// (a score you set yourself is always shown as you set it)
 	const sourcesLabel = (l) => l.sources.map((s) => (s === 'manual' ? 'added by you' : s)).join(', ');
-	const tier = (l) =>
-		isManual(l) || l.passes_filters ? scoreTier(scoreOf(l), data.criteria.notifyMinScore) : 'low';
+	const tier = (l) => (isScored(l) ? scoreTier(scoreOf(l)) : 'none');
 	const esc = (s = '') => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 	function drawMarkers() {
@@ -130,7 +127,7 @@
 				.bindTooltip(
 					`<strong>${esc(l.address ?? '')}</strong><br>${money(l.price)}/mo · ${esc(l.bedrooms_raw ?? l.bedrooms ?? '?')} bed` +
 						(sqft ? ` · ${sqft}` : '') +
-						`<br><span class="tip-hint">Score ${scoreOf(l)}${isManual(l) ? ' (yours)' : ''} · click to view</span>`,
+						`<br><span class="tip-hint">${isScored(l) ? `Score ${scoreOf(l)}` : 'Not scored yet'} · click to view</span>`,
 					{ direction: 'top', offset: [0, -8], className: 'listing-tip' }
 				)
 				.on('mouseover', () => (hoveredId = l.id))
@@ -324,16 +321,14 @@
 									min="0"
 									max="999"
 									step="1"
-									value={scoreOf(l)}
+									value={scoreOf(l) ?? ''}
 									aria-label="Your score for {l.address ?? 'this listing'}"
 									use:focusAndSelect
 								/>
 								<div class="score-edit-actions">
 									<button type="submit">Save</button>
-									{#if isManual(l)}
-										<button type="submit" name="reset" value="1" class="reset" title="Back to the computed score ({l.score})">
-											Reset
-										</button>
+									{#if isScored(l)}
+										<button type="submit" name="reset" value="1" class="reset" title="Remove the score">Clear</button>
 									{/if}
 									<button type="button" class="cancel" onclick={() => (editingScoreId = null)}>Cancel</button>
 								</div>
@@ -342,11 +337,11 @@
 							<button
 								type="button"
 								class="score tier-{tier(l)}"
-								title={isManual(l) ? `Your score (computed: ${l.score}). Click to change` : 'Match score. Click to set your own'}
+								title={isScored(l) ? 'Your score. Click to change' : 'Not scored yet. Click to score it'}
 								onclick={() => (editingScoreId = l.id)}
 							>
-								<span class="score-value">{scoreOf(l)}</span>
-								<span class="score-label">{isManual(l) ? 'yours' : 'score'}</span>
+								<span class="score-value">{isScored(l) ? scoreOf(l) : '–'}</span>
+								<span class="score-label">{isScored(l) ? 'score' : 'rate'}</span>
 							</button>
 						{/if}
 					</div>

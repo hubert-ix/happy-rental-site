@@ -10,7 +10,7 @@ Saved searches on each site ──► Gmail (label: rental-alerts)
                                       ▼
                          /api/ingest (SvelteKit on Vercel)
         Gmail IMAP → Claude extracts fields → LocationIQ geocode
-                 → inside polygon? → score → merge duplicates
+                 → inside polygon? → filters + tags → merge duplicates
                                       │
                     Supabase (listings) ──► Dashboard (map + list + status)
                                       └───► Email digest / ntfy push for new matches
@@ -25,7 +25,7 @@ Edit these in `src/lib/server/config.js`.
 | Hard filters | 3+ bedrooms (above grade, so "3+1" counts) · ≤ $3,500 · inside Finch–Eglinton / Bathurst–Victoria Park · not basement/lower |
 | Points | backyard +30 · 2+ parking +30 (1 spot +15) · garage or storage +25 · +3 per $100 under budget |
 | Penalty | −20 when a listing explicitly says a feature is missing |
-| Notify at | passes filters and score ≥ 50 |
+| Notify at | every new listing that passes the filters |
 
 A value the email doesn't mention never fails a listing. It shows as a grey `? parking` tag so you know what to ask about.
 
@@ -98,7 +98,7 @@ src/lib/server/config.js    criteria, weights, polygon   ← edit me
 src/lib/server/gmail.js     Gmail IMAP read + SMTP send (app password)
 src/lib/server/extract.js   HTML→text, link/MLS detection, Claude extraction, normalising, dedupe keys
 src/lib/server/geo.js       point-in-polygon + cached geocoding (LocationIQ, Nominatim fallback)
-src/lib/server/score.js     hard filters + scoring
+src/lib/server/score.js     hard filters + feature tags
 src/lib/server/ingest.js    the pipeline + cross-site merge
 src/lib/server/notify.js    email digest + ntfy push
 src/routes/api/ingest       cron endpoint (Bearer CRON_SECRET)

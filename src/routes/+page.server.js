@@ -11,7 +11,7 @@ export async function load({ url }) {
 	const view = VIEWS.includes(url.searchParams.get('view')) ? url.searchParams.get('view') : 'matches';
 	const supabase = db(env);
 
-	let q = supabase.from('listings').select('*').order('effective_score', { ascending: false }).order('first_seen', { ascending: false }).limit(300);
+	let q = supabase.from('listings').select('*').order('score_override', { ascending: false, nullsFirst: false }).order('first_seen', { ascending: false }).limit(300);
 	if (view === 'matches') q = q.eq('passes_filters', true).not('status', 'in', '(rejected,gone,deleted)');
 	else if (view === 'all') q = q.neq('status', 'deleted');
 	else q = q.eq('status', view);
@@ -23,11 +23,11 @@ export async function load({ url }) {
 	]);
 	if (error) throw error;
 
-	// "New" listings always come first; within each group, highest score first, then newest.
+	// "New" listings always come first; within each group, highest score first (unscored last), then newest.
 	const sorted = (listings || []).sort(
 		(a, b) =>
 			(b.status === 'new') - (a.status === 'new') ||
-			(b.effective_score ?? 0) - (a.effective_score ?? 0) ||
+			(b.score_override ?? -1) - (a.score_override ?? -1) ||
 			String(b.first_seen ?? '').localeCompare(String(a.first_seen ?? ''))
 	);
 
@@ -95,7 +95,7 @@ export const actions = {
 		const form = await request.formData();
 		const id = Number(form.get('id'));
 		const raw = String(form.get('score') ?? '').trim();
-		// Empty (or the reset button) clears the override and goes back to the computed score
+		// Empty (or the Clear button) removes the score
 		const score_override = form.get('reset') || raw === '' ? null : Number(raw);
 		if (!id || (score_override !== null && (!Number.isInteger(score_override) || score_override < 0 || score_override > 999))) {
 			return fail(400, { message: 'Score must be a whole number from 0 to 999' });

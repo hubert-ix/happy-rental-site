@@ -1,14 +1,13 @@
-import { CRITERIA, WEIGHTS } from './config.js';
+import { CRITERIA } from './config.js';
 
 /**
- * Hard filters decide passes (true/false). Soft features add points.
- * Unknown values never fail a listing; they add a "?" note so you know what to ask the landlord.
- * @returns {{ passes: boolean, score: number, notes: string[] }}
+ * Hard filters decide passes (true/false). Features become tags: ✓ has it, ✗ doesn't, ? not mentioned.
+ * There is no computed score: you give each listing a score yourself on the dashboard.
+ * @returns {{ passes: boolean, notes: string[] }}
  */
-export function scoreListing(l, c = CRITERIA, w = WEIGHTS) {
+export function scoreListing(l, c = CRITERIA) {
 	const notes = [];
 	let passes = true;
-	let score = 0;
 	const fail = (msg) => {
 		passes = false;
 		notes.push(`✗ ${msg}`);
@@ -32,40 +31,21 @@ export function scoreListing(l, c = CRITERIA, w = WEIGHTS) {
 	if (l.in_area === false) fail('outside area');
 	else if (l.in_area === null || l.in_area === undefined) notes.push('? location (not geocoded)');
 
-	// --- soft features ---
-	if (l.has_backyard === true) {
-		score += w.backyard;
-		notes.push('✓ backyard');
-	} else if (l.has_backyard === false) {
-		score += w.explicitNoPenalty;
-		notes.push('✗ no backyard');
-	} else notes.push('? backyard');
+	// --- feature tags ---
+	if (l.has_backyard === true) notes.push('✓ backyard');
+	else if (l.has_backyard === false) notes.push('✗ no backyard');
+	else notes.push('? backyard');
 
 	let parking = l.parking_spaces;
 	if ((parking === null || parking === undefined) && l.has_garage === true) parking = 1; // a garage is at least one spot
 	if (parking === null || parking === undefined) notes.push('? parking');
-	else if (parking >= c.minParking) {
-		score += w.parking;
-		notes.push(`✓ ${parking} parking`);
-	} else if (parking >= 1) {
-		score += Math.round(w.parking / 2);
-		notes.push(`~ ${parking} parking`);
-	} else {
-		score += w.explicitNoPenalty;
-		notes.push('✗ no parking');
-	}
+	else if (parking >= c.minParking) notes.push(`✓ ${parking} parking`);
+	else if (parking >= 1) notes.push(`~ ${parking} parking`);
+	else notes.push('✗ no parking');
 
-	if (l.has_garage === true || l.has_storage === true) {
-		score += w.garageOrStorage;
-		notes.push(l.has_garage ? '✓ garage' : '✓ storage');
-	} else if (l.has_garage === false && l.has_storage === false) {
-		score += w.explicitNoPenalty;
-		notes.push('✗ no garage/storage');
-	} else notes.push('? garage/storage');
+	if (l.has_garage === true || l.has_storage === true) notes.push(l.has_garage ? '✓ garage' : '✓ storage');
+	else if (l.has_garage === false && l.has_storage === false) notes.push('✗ no garage/storage');
+	else notes.push('? garage/storage');
 
-	if (typeof l.price === 'number' && l.price >= c.minPrice && l.price <= c.maxPrice) {
-		score += Math.min(Math.floor((c.maxPrice - l.price) / 100) * w.underBudgetPer100, w.underBudgetMax);
-	}
-
-	return { passes, score: Math.max(score, 0), notes };
+	return { passes, notes };
 }

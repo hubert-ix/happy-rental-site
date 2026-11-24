@@ -10,19 +10,7 @@ export const CRITERIA = {
 	excludeUnitKeywords: [
 		'basement', 'lower', 'bsmt', 'room for rent', 'shared',
 		'commercial', 'office', 'retail', 'storefront', 'warehouse', 'parking space'
-	],
-	// Score at or above this (and passing hard filters) triggers a notification
-	notifyMinScore: 50
-};
-
-// Points awarded for "nice to have" features. Unknown = 0 points but flagged.
-export const WEIGHTS = {
-	backyard: 30,
-	parking: 30, // full points at minParking, half at 1 space
-	garageOrStorage: 25,
-	underBudgetPer100: 3, // small bonus for every $100 under maxPrice…
-	underBudgetMax: 15, // …capped, so cheapness alone can't push a listing to the top
-	explicitNoPenalty: -20 // listing explicitly says the feature is missing
+	]
 };
 
 /**

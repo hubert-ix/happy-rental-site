@@ -15,7 +15,7 @@ export function digestHtml(listings, dashboardUrl) {
           </div>
           <div style="margin:4px 0">
             <b>${l.price ? '$' + l.price.toLocaleString('en-CA') : 'price ?'}</b>
-            · ${l.bedrooms_raw ?? l.bedrooms ?? '?'} bed${formatSqft(l.sqft_min, l.sqft_max) ? ` · ${formatSqft(l.sqft_min, l.sqft_max)}` : ''} · score ${l.score}
+            · ${l.bedrooms_raw ?? l.bedrooms ?? '?'} bed${formatSqft(l.sqft_min, l.sqft_max) ? ` · ${formatSqft(l.sqft_min, l.sqft_max)}` : ''}
           </div>
           <div style="color:#444;font-size:13px">${esc(l.score_notes.join('  '))}</div>
           ${l.summary ? `<div style="color:#666;font-size:13px;margin-top:4px">${esc(l.summary)}</div>` : ''}
@@ -52,7 +52,7 @@ export async function notifyMatches(env, listings, dashboardUrl) {
 			},
 			body: listings
 				.slice(0, 5)
-				.map((l) => `${l.address ?? '?'} · $${l.price ?? '?'} · score ${l.score}`)
+				.map((l) => `${l.address ?? '?'} · $${l.price ?? '?'}`)
 				.join('\n')
 		});
 	}

@@ -88,7 +88,7 @@ describe('upsertListing', () => {
 		expect([row.sqft_min, row.sqft_max]).toEqual([1100, 1500]); // kept: realtor.ca didn't state a size
 		expect(row.in_area).toBe(true);
 		expect(row.passes_filters).toBe(true);
-		expect(row.score).toBe(85);
+		expect(row.score_notes).toEqual(expect.arrayContaining(['✓ backyard', '✓ garage']));
 		expect(row.notified_at).toBe(null); // price drop re-arms the notification
 		expect(fetch).toHaveBeenCalledTimes(1); // geocoded once, then reused
 	});

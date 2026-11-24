@@ -71,9 +71,8 @@ export async function upsertListing(env, supabase, l) {
 	}
 	merged.in_area = merged.lat === null ? null : pointInPolygon(merged.lng, merged.lat);
 
-	const { passes, score, notes } = scoreListing(merged);
+	const { passes, notes } = scoreListing(merged);
 	merged.passes_filters = passes;
-	merged.score = score;
 	merged.score_notes = notes;
 	if (priceDropped) merged.notified_at = null; // a price drop is worth another ping
 
@@ -110,10 +109,10 @@ export async function backfillLocations(env, supabase, limit = 20) {
 		const hit = await geocode(env, supabase, row.address);
 		if (!hit) continue;
 		const updated = { ...row, ...hit, in_area: pointInPolygon(hit.lng, hit.lat) };
-		const { passes, score, notes } = scoreListing(updated);
+		const { passes, notes } = scoreListing(updated);
 		const { error } = await supabase
 			.from('listings')
-			.update({ lat: hit.lat, lng: hit.lng, in_area: updated.in_area, passes_filters: passes, score, score_notes: notes })
+			.update({ lat: hit.lat, lng: hit.lng, in_area: updated.in_area, passes_filters: passes, score_notes: notes })
 			.eq('id', row.id);
 		if (!error) located++;
 	}
@@ -131,16 +130,15 @@ export async function rescoreAll(supabase) {
 	for (const row of rows || []) {
 		// Recheck the area too, so changes to AREA_POLYGON apply to listings located earlier
 		const in_area = row.lat == null || row.lng == null ? row.in_area : pointInPolygon(row.lng, row.lat);
-		const { passes, score, notes } = scoreListing({ ...row, in_area });
+		const { passes, notes } = scoreListing({ ...row, in_area });
 		const same =
 			row.in_area === in_area &&
 			row.passes_filters === passes &&
-			row.score === score &&
 			JSON.stringify(row.score_notes) === JSON.stringify(notes);
 		if (same) continue;
 		const { error } = await supabase
 			.from('listings')
-			.update({ in_area, passes_filters: passes, score, score_notes: notes })
+			.update({ in_area, passes_filters: passes, score_notes: notes })
 			.eq('id', row.id);
 		if (!error) changed++;
 	}
@@ -203,10 +201,9 @@ export async function runIngest(env, { dashboardUrl } = {}) {
 		.from('listings')
 		.select('*')
 		.eq('passes_filters', true)
-		.gte('score', CRITERIA.notifyMinScore)
 		.is('notified_at', null)
 		.not('status', 'in', '(rejected,gone,deleted)')
-		.order('score', { ascending: false });
+		.order('first_seen', { ascending: false });
 
 	if (matches?.length) {
 		await notifyMatches(env, matches, dashboardUrl);
@@ -254,8 +251,8 @@ export async function applyManualEdit(env, supabase, id, fields) {
 	if ('url' in changes && changes.url) changes.urls = [...new Set([...(row.urls || []), changes.url])];
 	if (!Object.keys(changes).length) return row;
 
-	const { passes, score, notes } = scoreListing({ ...row, ...changes });
-	Object.assign(changes, { passes_filters: passes, score, score_notes: notes, locked_fields: [...locked] });
+	const { passes, notes } = scoreListing({ ...row, ...changes });
+	Object.assign(changes, { passes_filters: passes, score_notes: notes, locked_fields: [...locked] });
 
 	const { error } = await supabase.from('listings').update(changes).eq('id', id);
 	if (error) throw new Error(error.message);

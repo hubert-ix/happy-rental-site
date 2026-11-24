@@ -17,9 +17,9 @@ export function noteToTag(note) {
 	return { kind, label: text, isPlace: /location|area/.test(text) };
 }
 
-/** Score badge tier, matching the notification threshold. */
-export function scoreTier(score, notifyMin = 50) {
-	if (score >= notifyMin) return 'high';
+/** Score badge colour for a score you set: 50+ green, 20+ yellow, below that pink. */
+export function scoreTier(score, high = 50) {
+	if (score >= high) return 'high';
 	if (score >= 20) return 'mid';
 	return 'low';
 }

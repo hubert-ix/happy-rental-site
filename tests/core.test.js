@@ -59,11 +59,11 @@ describe('scoring', () => {
 		has_storage: null
 	};
 
-	it('full match scores high and passes', () => {
+	it('full match passes, with tags and no computed score', () => {
 		const r = scoreListing({ ...base, has_backyard: true, parking_spaces: 4, has_garage: true });
 		expect(r.passes).toBe(true);
-		expect(r.score).toBe(85);
-		expect(r.notes).toContain('✓ backyard');
+		expect(r.score).toBeUndefined();
+		expect(r.notes).toEqual(expect.arrayContaining(['✓ backyard', '✓ 4 parking', '✓ garage']));
 	});
 
 	it('over budget fails', () => {
@@ -89,21 +89,15 @@ describe('scoring', () => {
 		expect(r.notes).toContain('? location (not geocoded)');
 	});
 
-	it('unknowns pass with ? notes and zero points', () => {
+	it('unknowns pass with ? notes', () => {
 		const r = scoreListing(base);
 		expect(r.passes).toBe(true);
-		expect(r.score).toBe(0);
 		expect(r.notes).toEqual(expect.arrayContaining(['? backyard', '? parking', '? garage/storage']));
 	});
 
 	it('garage implies at least one parking spot', () => {
 		const r = scoreListing({ ...base, has_garage: true });
 		expect(r.notes).toContain('~ 1 parking');
-	});
-
-	it('rewards being under budget', () => {
-		const r = scoreListing({ ...base, price: 3000, has_backyard: true });
-		expect(r.score).toBe(30 + 5 * 3);
 	});
 });
 
@@ -233,11 +227,6 @@ describe('square footage', () => {
 
 describe('scoring guards against bad prices and non-homes', () => {
 	const base = { price: 3500, bedrooms: 3, bedrooms_raw: '3', in_area: true, has_backyard: null, parking_spaces: null, has_garage: null, has_storage: null };
-
-	it('caps the under-budget bonus', () => {
-		expect(scoreListing({ ...base, price: 2600 }).score).toBe(15); // 9 × $100 under = 27, capped at 15
-		expect(scoreListing({ ...base, price: 3300 }).score).toBe(6);
-	});
 
 	it('rejects anything under the minimum price (usually basements)', () => {
 		const r = scoreListing({ ...base, price: 1900, parking_spaces: 1 });
