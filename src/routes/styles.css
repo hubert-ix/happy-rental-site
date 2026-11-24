@@ -451,6 +451,7 @@ body {
 }
 
 /* tint the dropdown by status */
+.dashboard .status select[data-status='reviewed'] { background-color: var(--lavender-soft); }
 .dashboard .status select[data-status='shortlisted'] { background-color: var(--good-bg); }
 .dashboard .status select[data-status='contacted'],
 .dashboard .status select[data-status='viewing'] { background-color: var(--lemon); }
@@ -658,6 +659,13 @@ body {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.dashboard .masthead-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .dashboard .add-btn {

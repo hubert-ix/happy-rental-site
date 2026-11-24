@@ -46,7 +46,7 @@ create table if not exists listings (
   effective_score  int generated always as (coalesce(score_override, score)) stored,
   score_notes      text[] default '{}',
   status           text not null default 'new'
-                   check (status in ('new','shortlisted','contacted','viewing','rejected','gone','deleted')),
+                   check (status in ('new','reviewed','shortlisted','contacted','viewing','rejected','gone','deleted')),
   notes            text,
   locked_fields    text[] not null default '{}', -- fields edited by hand; imports never overwrite them
   notified_at      timestamptz,

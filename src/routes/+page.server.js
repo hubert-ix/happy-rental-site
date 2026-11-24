@@ -4,7 +4,7 @@ import { db } from '$lib/server/supabase.js';
 import { AREA_GEOJSON, CRITERIA } from '$lib/server/config.js';
 import { applyManualEdit, addManualListing } from '$lib/server/ingest.js';
 
-const STATUSES = ['new', 'shortlisted', 'contacted', 'viewing', 'rejected', 'gone'];
+const STATUSES = ['new', 'reviewed', 'shortlisted', 'contacted', 'viewing', 'rejected', 'gone'];
 const VIEWS = ['matches', 'all', ...STATUSES];
 
 export async function load({ url }) {
@@ -23,11 +23,19 @@ export async function load({ url }) {
 	]);
 	if (error) throw error;
 
+	// "New" listings always come first; within each group, highest score first, then newest.
+	const sorted = (listings || []).sort(
+		(a, b) =>
+			(b.status === 'new') - (a.status === 'new') ||
+			(b.effective_score ?? 0) - (a.effective_score ?? 0) ||
+			String(b.first_seen ?? '').localeCompare(String(a.first_seen ?? ''))
+	);
+
 	return {
 		view,
 		views: VIEWS,
 		statuses: STATUSES,
-		listings: listings || [],
+		listings: sorted,
 		matchCount: matchCount ?? 0,
 		lastRun: lastEmail?.processed_at ?? null,
 		area: AREA_GEOJSON,

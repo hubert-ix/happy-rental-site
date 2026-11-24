@@ -225,7 +225,12 @@
 
 <main class="dashboard">
 	<header class="masthead">
-		<h1>Happy Rental</h1>
+		<div class="masthead-top">
+			<h1>Happy Rental</h1>
+			<button type="button" class="add-btn" onclick={() => ((adding = !adding), (addMessage = null))}>
+				<Plus size={16} />Add listing
+			</button>
+		</div>
 		<p class="meta">
 			<strong>{data.matchCount} active match{data.matchCount === 1 ? '' : 'es'}</strong>
 			· {money(data.criteria.minPrice)}–{money(data.criteria.maxPrice)} · {data.criteria.minBedrooms}+ bed · last email processed {ago(data.lastRun)}
@@ -236,9 +241,6 @@
 					<a href="?view={v}" class:active={v === data.view} aria-current={v === data.view ? 'page' : undefined}>{v}</a>
 				{/each}
 			</nav>
-			<button type="button" class="add-btn" onclick={() => ((adding = !adding), (addMessage = null))}>
-				<Plus size={16} />Add listing
-			</button>
 		</div>
 	</header>
 
