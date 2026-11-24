@@ -5,7 +5,7 @@
 	import { Bed, Bath, Ruler, ExternalLink, MapPin, Check, X, Minus, CircleQuestionMark, Pencil, Trash2, Plus, MapPinned, Map as MapIcon } from '@lucide/svelte';
 	import { formatSqft } from '$lib/format.js';
 	import ListingForm from '$lib/components/ListingForm.svelte';
-	import { noteToTag, scoreTier } from '$lib/tags.js';
+	import { noteToTag, scoreColour, scoreTextColour, MAX_SCORE } from '$lib/tags.js';
 	import 'leaflet/dist/leaflet.css';
 	import 'maplibre-gl/dist/maplibre-gl.css';
 	import './styles.css';
@@ -96,7 +96,6 @@
 		editingScoreId = null;
 	};
 
-	const TIER_COLOURS = { high: '#2f9e74', mid: '#cdb52a', low: '#e0739a', none: '#8f84b8' };
 	const TAG_ICONS = { good: Check, bad: X, meh: Minus, unknown: CircleQuestionMark };
 
 	const money = (n) => (n ? '$' + Number(n).toLocaleString('en-CA') : '—');
@@ -106,7 +105,6 @@
 		return h < 1 ? 'just now' : h < 48 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
 	};
 	const sourcesLabel = (l) => l.sources.map((s) => (s === 'manual' ? 'added by you' : s)).join(', ');
-	const tier = (l) => (isScored(l) ? scoreTier(scoreOf(l)) : 'none');
 	const esc = (s = '') => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 	function drawMarkers() {
@@ -120,14 +118,14 @@
 				radius: 8,
 				weight: 2,
 				color: '#fff',
-				fillColor: TIER_COLOURS[tier(l)],
+				fillColor: scoreColour(scoreOf(l)),
 				fillOpacity: l.passes_filters ? 0.95 : 0.6
 			})
 				// Details on hover; a click jumps to the card and keeps it highlighted
 				.bindTooltip(
 					`<strong>${esc(l.address ?? '')}</strong><br>${money(l.price)}/mo · ${esc(l.bedrooms_raw ?? l.bedrooms ?? '?')} bed` +
 						(sqft ? ` · ${sqft}` : '') +
-						`<br><span class="tip-hint">${isScored(l) ? `Score ${scoreOf(l)}` : 'Not scored yet'} · click to view</span>`,
+						`<br><span class="tip-hint">${isScored(l) ? `Score ${scoreOf(l)}/${MAX_SCORE}` : 'Not scored yet'} · click to view</span>`,
 					{ direction: 'top', offset: [0, -8], className: 'listing-tip' }
 				)
 				.on('mouseover', () => (hoveredId = l.id))
@@ -319,7 +317,7 @@
 									name="score"
 									type="number"
 									min="0"
-									max="999"
+									max={MAX_SCORE}
 									step="1"
 									value={scoreOf(l) ?? ''}
 									aria-label="Your score for {l.address ?? 'this listing'}"
@@ -336,12 +334,15 @@
 						{:else}
 							<button
 								type="button"
-								class="score tier-{tier(l)}"
+								class="score"
+								class:unscored={!isScored(l)}
+								style:background-color={scoreColour(scoreOf(l))}
+								style:color={scoreTextColour(scoreOf(l))}
 								title={isScored(l) ? 'Your score. Click to change' : 'Not scored yet. Click to score it'}
 								onclick={() => (editingScoreId = l.id)}
 							>
 								<span class="score-value">{isScored(l) ? scoreOf(l) : '–'}</span>
-								<span class="score-label">{isScored(l) ? 'score' : 'rate'}</span>
+								<span class="score-label">{isScored(l) ? `/ ${MAX_SCORE}` : 'rate'}</span>
 							</button>
 						{/if}
 					</div>

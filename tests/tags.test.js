@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { noteToTag, scoreTier } from '../src/lib/tags.js';
+import { noteToTag, scoreColour } from '../src/lib/tags.js';
 
 describe('display tags', () => {
 	it('turns scorer notes into labelled tags', () => {
@@ -12,10 +12,12 @@ describe('display tags', () => {
 		expect(noteToTag('✗ outside area').isPlace).toBe(true);
 	});
 
-	it('tiers scores against the notify threshold', () => {
-		expect(scoreTier(85)).toBe('high');
-		expect(scoreTier(50)).toBe('high');
-		expect(scoreTier(33)).toBe('mid');
-		expect(scoreTier(9)).toBe('low');
+		it('colours scores out of 10, green to red', () => {
+		expect(scoreColour(10)).toBe('#1f9e5a');
+		expect(scoreColour(0)).toBe('#dc4b4b');
+		expect(scoreColour(null)).toBe('#dedede');
+		expect(scoreTextColour(10)).toBe('#ffffff');
+		expect(scoreTextColour(5)).toBe(null);
+		expect(scoreTextColour(null)).toBe(null);
 	});
 });

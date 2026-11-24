@@ -97,8 +97,8 @@ export const actions = {
 		const raw = String(form.get('score') ?? '').trim();
 		// Empty (or the Clear button) removes the score
 		const score_override = form.get('reset') || raw === '' ? null : Number(raw);
-		if (!id || (score_override !== null && (!Number.isInteger(score_override) || score_override < 0 || score_override > 999))) {
-			return fail(400, { message: 'Score must be a whole number from 0 to 999' });
+		if (!id || (score_override !== null && (!Number.isInteger(score_override) || score_override < 0 || score_override > 10))) {
+			return fail(400, { message: 'Score must be a whole number from 0 to 10' });
 		}
 		const { error } = await db(env).from('listings').update({ score_override }).eq('id', id);
 		if (error) return fail(500, { message: error.message });

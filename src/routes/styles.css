@@ -376,10 +376,8 @@ body {
   display: none;
 }
 
-.dashboard .tier-high { background: var(--high-bg); color: var(--high-ink); }
-.dashboard .tier-mid { background: var(--mid-bg); color: var(--mid-ink); }
-.dashboard .tier-low { background: var(--low-bg); color: var(--low-ink); }
-.dashboard .tier-none { background: var(--lavender); color: var(--muted); }
+.dashboard .score { color: var(--ink); }
+.dashboard .score.unscored { color: var(--muted); }
 
 .dashboard .summary {
   font-size: 15px;
