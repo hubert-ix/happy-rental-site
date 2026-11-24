@@ -349,6 +349,7 @@
 
 					{#if l.summary}<p class="summary">{l.summary}</p>{/if}
 
+					<!--
 					<ul class="tags">
 						{#each l.score_notes as note}
 							{@const tag = noteToTag(note)}
@@ -356,6 +357,7 @@
 							<li class="tag {tag.kind}"><Icon size={13} />{tag.label}</li>
 						{/each}
 					</ul>
+					-->
 
 					<div class="card-actions">
 						<form method="POST" action="?/status" use:enhance class="status">
@@ -379,7 +381,7 @@
 							<input
 								name="notes"
 								aria-label="Notes"
-								placeholder="Notes (asked about garage, viewing Tue…)"
+								placeholder="Notes..."
 								value={l.notes ?? ''}
 								onblur={(e) => saveNoteOnBlur(e, l)}
 							/>
